@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TPM Project Planner</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231f3a5f'/><path d='M8 10h16M8 16h11M8 22h7' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<section id="auth-view" class="auth hidden">
+  <div class="auth-card">
+    <div class="brand big"><span class="logo"></span><div><strong>TPM Project Planner</strong><small>Restaurant build-out plan</small></div></div>
+    <div class="tabs auth-tabs">
+      <button data-auth="signin" class="active">Sign in</button>
+      <button data-auth="signup">Create account</button>
+    </div>
+    <form id="auth-form" autocomplete="on">
+      <label>Email<input type="email" name="email" required autocomplete="email"></label>
+      <label>Password<input type="password" name="password" required minlength="6" autocomplete="current-password"></label>
+      <button class="btn primary wide" type="submit" id="auth-submit">Sign in</button>
+      <button class="link" type="button" id="forgot">Forgot password?</button>
+      <p class="msg" id="auth-msg"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ NOT A MEMBER ============ -->
+<section id="nomember-view" class="auth hidden">
+  <div class="auth-card">
+    <div class="brand big"><span class="logo"></span><div><strong>TPM Project Planner</strong><small>Almost there</small></div></div>
+    <p>You're signed in as <strong id="nomember-email"></strong>, but this email hasn't been added to the team yet.</p>
+    <p class="muted">Ask any team member to open <em>Team</em> in the planner and add your email, then click below.</p>
+    <button class="btn primary wide" id="recheck">I've been added — try again</button>
+    <button class="link" id="nomember-signout">Sign out</button>
+  </div>
+</section>
+
+<!-- ============ PASSWORD RESET ============ -->
+<section id="reset-view" class="auth hidden">
+  <div class="auth-card">
+    <div class="brand big"><span class="logo"></span><div><strong>Set a new password</strong><small>TPM Project Planner</small></div></div>
+    <form id="reset-form">
+      <label>New password<input type="password" name="password" required minlength="6" autocomplete="new-password"></label>
+      <button class="btn primary wide" type="submit">Save password</button>
+      <p class="msg" id="reset-msg"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<div id="app-view" class="hidden">
+  <header class="topbar">
+    <div class="brand"><span class="logo"></span><div><strong>TPM Project Planner</strong><small id="overall-label">Loading…</small></div></div>
+    <div class="overall"><div class="bar"><span id="overall-bar"></span></div></div>
+    <div class="top-actions">
+      <button class="btn ghost" id="team-btn" title="Who can use the planner">👥 Team</button>
+      <span class="who" id="who"></span>
+      <button class="btn ghost" id="signout">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary" id="summary"></section>
+
+    <div class="toolbar">
+      <div class="tabs" id="view-tabs">
+        <button data-view="board" class="active">Milestones</button>
+        <button data-view="tasks">All tasks</button>
+        <button data-view="list">List</button>
+        <button data-view="activity">Recent changes</button>
+      </div>
+      <div class="filters">
+        <input type="search" id="search" placeholder="Search…">
+        <select id="owner-filter"><option value="">Everyone</option></select>
+        <label class="check"><input type="checkbox" id="hide-complete"> Hide complete</label>
+        <button class="btn primary" id="add-milestone">＋ New milestone</button>
+      </div>
+    </div>
+
+    <section id="view-board" class="view"></section>
+    <section id="view-tasks" class="view hidden"></section>
+    <section id="view-list" class="view hidden"></section>
+    <section id="view-activity" class="view hidden"></section>
+  </main>
+</div>
+
+<!-- ============ MILESTONE DETAIL DRAWER ============ -->
+<div class="scrim hidden" id="drawer-scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <button class="btn ghost" id="drawer-close">✕ Close</button>
+    <div class="drawer-actions">
+      <button class="btn ghost" id="edit-milestone">✎ Edit</button>
+      <button class="btn danger-ghost" id="delete-milestone">🗑 Delete</button>
+    </div>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<!-- ============ MODAL (forms / confirm) ============ -->
+<div class="modal-wrap hidden" id="modal-wrap">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="modal-title"></h2>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
