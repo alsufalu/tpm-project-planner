@@ -399,14 +399,14 @@
       <form id="mform" class="form-grid">
         <label class="full">Milestone name<input type="text" name="title" required value="${esc(m.title)}"></label>
         <label>Owner<input type="text" name="owner" value="${esc(m.owner)}" placeholder="e.g. Vivek/Alberto"></label>
-        <label>Status${!isNew && tasksOf(m.id).length ? ` <span class="muted hint-inline">set by its tasks</span>` : ""}<select name="status" ${!isNew && tasksOf(m.id).length ? "disabled" : ""}>${opt(STATUSES, m.status)}</select></label>
+        <label><span>Status${!isNew && tasksOf(m.id).length ? ` <span class="muted hint-inline">· set by its tasks</span>` : ""}</span><select name="status" ${!isNew && tasksOf(m.id).length ? "disabled" : ""}>${opt(STATUSES, m.status)}</select></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
         <div></div>
         <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${m.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
-        <label>Review date <span class="muted hint-inline">optional, for ongoing items</span><input type="date" name="review_date" value="${esc(m.review_date)}"></label>
-        <label>Completed on <span class="muted hint-inline">filled in automatically</span><input type="date" name="completed_on" value="${esc(m.completed_on)}"></label>
+        <label><span>Review date <span class="muted hint-inline">· optional, for ongoing items</span></span><input type="date" name="review_date" value="${esc(m.review_date)}"></label>
+        <label><span>Completed on <span class="muted hint-inline">· filled in automatically</span></span><input type="date" name="completed_on" value="${esc(m.completed_on)}"></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(m.dependencies)}</textarea></label>
         <label class="full">Comments<textarea name="comments">${esc(m.comments)}</textarea></label>
         <div class="modal-actions full"><button type="button" class="btn" id="mcancel">Cancel</button><button class="btn primary" type="submit">${isNew ? "Create milestone" : "Save changes"}</button></div>
@@ -436,8 +436,8 @@
         <label>Start date<input type="date" name="start_date" value="${esc(t.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(t.end_date)}" ${t.ongoing ? "disabled" : ""}></label>
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${t.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
-        <label>Review date <span class="muted hint-inline">optional, for ongoing items</span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
-        <label>Completed on <span class="muted hint-inline">filled in automatically</span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
+        <label><span>Review date <span class="muted hint-inline">· optional, for ongoing items</span></span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
+        <label><span>Completed on <span class="muted hint-inline">· filled in automatically</span></span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
         <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}" onfocus="this.select()"></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(t))}</select></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(t.dependencies)}</textarea></label>

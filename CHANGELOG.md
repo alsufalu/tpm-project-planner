@@ -2,6 +2,9 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.3.2 — 2026-10-18
+- Edit forms: field hints ("set by its tasks", etc.) sit on the same line as the label, so Status lines up with Owner and Review date with Completed on.
+
 ## v1.3.1 — 2026-10-18
 - Fix: the Edit/New windows no longer close by themselves when a text selection (e.g. selecting the "0" in % done) ends outside the box. Clicking outside or pressing Esc only closes the window if nothing was typed; otherwise use Save or Cancel.
 - Clicking into "% done" selects the number so you can type over it.
