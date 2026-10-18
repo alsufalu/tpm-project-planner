@@ -113,12 +113,22 @@
     await loadAll();
     if (files.length) toast(files.length > 1 ? `${files.length} files attached` : "File attached");
   }
+  // How a file opens: browsers show PDFs, images, text, audio and video themselves; Word/Excel/PowerPoint
+  // open in Microsoft's free online viewer; anything else is downloaded (a browser can't show it).
+  const extOf = (name) => (name.split(".").pop() || "").toLowerCase();
+  const BROWSER_VIEW = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "txt", "csv", "mp4", "webm", "mov", "mp3", "wav", "m4a"]);
+  const OFFICE_VIEW = new Set(["doc", "docx", "xls", "xlsx", "ppt", "pptx"]);
+  const openMode = (name) => BROWSER_VIEW.has(extOf(name)) ? "browser" : OFFICE_VIEW.has(extOf(name)) ? "office" : "download";
   async function openFile(id) {
     const a = state.attachments.find((x) => x.id === id); if (!a) return;
+    const mode = openMode(a.file_name);
+    if (mode === "download") { toast(`A browser can't display .${extOf(a.file_name)} files, so it's downloading instead.`); return downloadFile(id); }
     const w = window.open("about:blank", "_blank"); // open now, so pop-up blockers allow it
+    if (w) w.document.write(`<title>${esc(a.file_name)}</title><p style="font:16px system-ui;padding:24px;color:#555">Opening ${esc(a.file_name)}…</p>`);
     const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(a.storage_path, 3600);
     if (error) { if (w) w.close(); return toast("Couldn't open file: " + error.message, true); }
-    if (w) w.location.href = data.signedUrl; else window.location.href = data.signedUrl;
+    const url = mode === "office" ? "https://view.officeapps.live.com/op/view.aspx?src=" + encodeURIComponent(data.signedUrl) : data.signedUrl;
+    if (w) w.location.href = url; else window.location.href = url;
   }
   async function downloadFile(id) {
     const a = state.attachments.find((x) => x.id === id); if (!a) return;
@@ -142,7 +152,7 @@
         <button class="fname link" data-file-open="${a.id}" title="Open in a new tab">${esc(a.file_name)}</button>
         <span class="muted fmeta">${fmtSize(a.size_bytes)} · ${esc(nameFor(a.uploaded_by))} · ${ago(a.created_at)}</span>
         <span class="factions">
-          <button class="btn ghost small" data-file-open="${a.id}" title="Open in a new tab">↗ Open</button>
+          <button class="btn ghost small" data-file-open="${a.id}" title="${openMode(a.file_name) === "office" ? "Open in a new tab (Microsoft online viewer)" : openMode(a.file_name) === "download" ? "This type can't be shown in a browser — downloads it" : "Open in a new tab"}">${openMode(a.file_name) === "download" ? "⬇ Get" : "↗ Open"}</button>
           <button class="btn ghost small" data-file-dl="${a.id}" title="Download">⬇</button>
           <button class="btn danger-ghost small" data-file-del="${a.id}" title="Remove file">✕</button>
         </span>

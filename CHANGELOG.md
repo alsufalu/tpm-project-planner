@@ -2,6 +2,9 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.4.2 — 2026-10-18
+- Fix: Word, Excel and PowerPoint attachments now open in a new tab using Microsoft's free online viewer instead of showing a blank page. PDFs, images, text, audio and video open directly in the browser; other file types (e.g. .zip, .dwg) download instead.
+
 ## v1.4.1 — 2026-10-18
 - % done and status now stay in sync: entering a % above 0 on a not-started task moves it to In progress (and its milestone follows); 100% marks it Complete. Changing the status yourself still wins (e.g. reopening a finished task).
 - Fix: % done accepts any whole number 0–100 (it previously only allowed multiples of 5, which blocked saving values like 33).
