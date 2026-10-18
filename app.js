@@ -504,7 +504,7 @@
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${t.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
         <label><span>Review date <span class="muted hint-inline">· optional, for ongoing items</span></span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
         <label><span>Completed on <span class="muted hint-inline">· filled in automatically</span></span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
-        <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}" onfocus="this.select()"></label>
+        <label><span>% done <span class="muted hint-inline">· above 0 = In progress, 100 = Complete</span></span><input type="number" name="percent_done" min="0" max="100" step="1" value="${t.percent_done ?? 0}" onfocus="this.select()"></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(t))}</select></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(t.dependencies)}</textarea></label>
         <label class="full">Comments<textarea name="comments">${esc(t.comments)}</textarea></label>
@@ -515,8 +515,15 @@
       e.preventDefault();
       const d = formData(e.target);
       d.percent_done = Math.max(0, Math.min(100, parseInt(d.percent_done || "0", 10) || 0));
-      if (d.status === "Complete") d.percent_done = 100;
-      else if (d.percent_done === 100) d.status = "Complete";
+      // Same rule as the database: a changed status wins; otherwise % done drives the status.
+      const statusChanged = !isNew && d.status !== t.status;
+      if (statusChanged) {
+        if (d.status === "Complete") d.percent_done = 100;
+        else if (d.status === "Not started") d.percent_done = 0;
+        else if (d.percent_done >= 100) d.percent_done = 99;
+      } else if (d.percent_done >= 100) d.status = "Complete";
+      else if (d.percent_done > 0 && d.status === "Not started") d.status = "In progress";
+      else if (d.status === "Complete") d.percent_done = 100;
       if (isNew || d.milestone_id !== t.milestone_id) d.position = Math.max(0, ...tasksOf(d.milestone_id).map((x) => x.position)) + 1;
       if (await save("pm_tasks", isNew ? null : t.id, d)) { closeModal(); toast(isNew ? "Task added" : "Task saved"); }
     };

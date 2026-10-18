@@ -182,3 +182,6 @@ create table public.pm_attachments (
 alter table public.pm_attachments enable row level security;
 create policy pm_attachments_all on public.pm_attachments for all to authenticated
   using (public.pm_is_member()) with check (public.pm_is_member());
+
+-- v1.4.1: pm_touch keeps tasks' % done and status consistent (changed status wins; otherwise
+-- 100% -> Complete, 1-99% on a not-started task -> In progress). See migration pm_percent_status_precedence.

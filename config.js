@@ -5,6 +5,6 @@ window.PLANNER_CONFIG = {
   supabaseKey: "sb_publishable_vrJCvon7BQioK2snDPB4Xw_-v7sr0PO",
   projectName: "TPM Project Planner",
   // Bump this with every release (and the ?v= numbers in index.html). See CHANGELOG.md.
-  version: "1.4.0",
+  version: "1.4.1",
   released: "2026-10-18"
 };
