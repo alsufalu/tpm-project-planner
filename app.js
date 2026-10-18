@@ -16,12 +16,23 @@
     session: null, milestones: [], tasks: [], members: [], activity: [],
     view: "board", q: "", owner: "", hideComplete: false, tileFilter: null,
     openId: null, authMode: "signin", recovering: false,
-    sortField: "plan", sortDir: "asc",
+    sortField: "plan", sortDir: "asc",          // main views
+    taskSortField: "plan", taskSortDir: "asc",  // task list inside a milestone
   };
+  const SORT_FIELDS = ["plan", "start_date", "end_date", "priority"];
   try {
     const saved = JSON.parse(localStorage.getItem("tpm-sort") || "null");
-    if (saved && ["plan", "start_date", "end_date"].includes(saved.f)) { state.sortField = saved.f; state.sortDir = saved.d === "desc" ? "desc" : "asc"; }
+    if (saved && SORT_FIELDS.includes(saved.f)) { state.sortField = saved.f; state.sortDir = saved.d === "desc" ? "desc" : "asc"; }
+    const savedT = JSON.parse(localStorage.getItem("tpm-task-sort") || "null");
+    if (savedT && SORT_FIELDS.includes(savedT.f)) { state.taskSortField = savedT.f; state.taskSortDir = savedT.d === "desc" ? "desc" : "asc"; }
   } catch (_) { /* storage unavailable */ }
+
+  const PRIORITIES = ["Critical", "High", "Normal", "Low"];
+  const P_RANK = { Critical: 0, High: 1, Normal: 2, Low: 3 };
+  const P_CLASS = { Critical: "p-crit", High: "p-high", Normal: "p-norm", Low: "p-low" };
+  const prio = (x) => (x && PRIORITIES.includes(x.priority) ? x.priority : "Normal");
+  // Tag shown on cards; "Normal" stays quiet unless asked for.
+  const prioTag = (x, showNormal = false) => { const p = prio(x); return p === "Normal" && !showNormal ? "" : `<span class="prio ${P_CLASS[p]}" title="Priority: ${p}">${p === "Critical" ? "⚑ " : ""}${p}</span>`; };
 
   // ---------- helpers ----------
   const $ = (s, el = document) => el.querySelector(s);
@@ -66,11 +77,14 @@
     if (x.milestone_id) { const m = milestoneById(x.milestone_id); return [(m ? m.position : 0), x.position]; }
     return [x.position, 0];
   }
-  function sortItems(list) {
-    const f = state.sortField, dir = state.sortDir === "desc" ? -1 : 1;
+  // Priority "asc" = most important first. Ties fall back to end date, then plan order.
+  function sortItems(list, f = state.sortField, dirName = state.sortDir) {
+    const dir = dirName === "desc" ? -1 : 1;
     const byPlan = (a, b) => { const ka = planKey(a), kb = planKey(b); return ka[0] - kb[0] || ka[1] - kb[1]; };
+    const byDate = (a, b, k) => { const va = a[k], vb = b[k]; if (!va && !vb) return 0; if (!va) return 1; if (!vb) return -1; return va < vb ? -1 : va > vb ? 1 : 0; };
     return [...list].sort((a, b) => {
       if (f === "plan") return byPlan(a, b) * dir;
+      if (f === "priority") return (P_RANK[prio(a)] - P_RANK[prio(b)]) * dir || byDate(a, b, "end_date") || byPlan(a, b);
       const va = a[f], vb = b[f];
       if (!va && !vb) return byPlan(a, b);
       if (!va) return 1;
@@ -78,16 +92,24 @@
       return (va < vb ? -1 : va > vb ? 1 : 0) * dir || byPlan(a, b);
     });
   }
+  function dirLabel(field, dir) {
+    if (field === "plan") return dir === "asc" ? "↑ First to last" : "↓ Last to first";
+    if (field === "priority") return dir === "asc" ? "↑ Most important first" : "↓ Least important first";
+    return dir === "asc" ? "↑ Earliest first" : "↓ Latest first";
+  }
   function renderSortControls() {
     $("#sort-field").value = state.sortField;
-    const btn = $("#sort-dir");
-    if (state.sortField === "plan") btn.textContent = state.sortDir === "asc" ? "↑ First to last" : "↓ Last to first";
-    else btn.textContent = state.sortDir === "asc" ? "↑ Earliest first" : "↓ Latest first";
+    $("#sort-dir").textContent = dirLabel(state.sortField, state.sortDir);
   }
   function setSort(field, dir) {
     state.sortField = field; state.sortDir = dir;
     try { localStorage.setItem("tpm-sort", JSON.stringify({ f: field, d: dir })); } catch (_) { /* ignore */ }
     renderSortControls(); renderAll();
+  }
+  function setTaskSort(field, dir) {
+    state.taskSortField = field; state.taskSortDir = dir;
+    try { localStorage.setItem("tpm-task-sort", JSON.stringify({ f: field, d: dir })); } catch (_) { /* ignore */ }
+    renderDrawer();
   }
 
   // ---------- filtering ----------
@@ -206,7 +228,7 @@
     const p = progress(m); const ts = tasksOf(m.id);
     const chips = STATUSES.map((s) => { const n = ts.filter((t) => t.status === s).length; return n ? `<span class="chip ${S_CLASS[s]}" title="${s}">${n} ${s.toLowerCase()}</span>` : ""; }).join("");
     return `<div class="card ${S_CLASS[m.status]}" draggable="true" data-open="${m.id}" data-drag="${m.id}">
-      <h4>${esc(m.title)}</h4>
+      ${prioTag(m) ? `<div class="tags">${prioTag(m)}</div>` : ""}<h4>${esc(m.title)}</h4>
       <div class="meta"><span>👤 ${esc(m.owner || "Unassigned")}</span><span class="${isLate(m) ? "late" : ""}">📅 ${m.end_date ? (isLate(m) ? "Was due " : "Due ") + fmtD(m.end_date) : "No due date"}</span></div>
       <div class="prog"><div class="bar"><span style="width:${p.pct}%"></span></div><span>${p.total ? `${p.done}/${p.total} tasks` : "No tasks"}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ""}
@@ -216,7 +238,7 @@
     const m = milestoneById(t.milestone_id);
     return `<div class="card ${S_CLASS[t.status]}" draggable="true" data-open="${t.milestone_id}" data-focus="${t.id}" data-drag="${t.id}">
       <div class="parent">${esc(m ? m.title : "")}</div>
-      <h4>${esc(t.title)}</h4>
+      ${prioTag(t) ? `<div class="tags">${prioTag(t)}</div>` : ""}<h4>${esc(t.title)}</h4>
       <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span><span class="${isLate(t) ? "late" : ""}">📅 ${t.end_date ? (isLate(t) ? "Was due " : "Due ") + fmtD(t.end_date) : "No due date"}</span>${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}</div>
     </div>`;
   }
@@ -236,10 +258,10 @@
       const ts = sortItems(tasksOf(m.id).filter(taskVisible));
       if (!milestoneVisible(m) && !ts.length) return;
       const p = progress(m);
-      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</td><td class="num">${p.pct}%</td></tr>`);
-      ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${fmtD(t.end_date)}</td><td class="num">${pctOfTask(t)}%</td></tr>`));
+      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${prioTag(m, true)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</td><td class="num">${p.pct}%</td></tr>`);
+      ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${prioTag(t, true)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${fmtD(t.end_date)}</td><td class="num">${pctOfTask(t)}%</td></tr>`));
     });
-    $("#view-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Milestone / task</th><th>Owner</th><th>Status</th><th>Start</th><th>End</th><th>Done</th></tr></thead><tbody>${rows.join("") || `<tr><td colspan="6" class="empty">Nothing matches your filters</td></tr>`}</tbody></table></div>`;
+    $("#view-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Milestone / task</th><th>Priority</th><th>Owner</th><th>Status</th><th>Start</th><th>End</th><th>Done</th></tr></thead><tbody>${rows.join("") || `<tr><td colspan="7" class="empty">Nothing matches your filters</td></tr>`}</tbody></table></div>`;
   }
 
   function renderActivity() {
@@ -265,10 +287,11 @@
   function renderDrawer() {
     const m = milestoneById(state.openId);
     if (!m) { closeDrawer(); return; }
-    const ts = tasksOf(m.id); const p = progress(m);
+    const ts = sortItems(tasksOf(m.id), state.taskSortField, state.taskSortDir); const p = progress(m);
+    const canMove = state.taskSortField === "plan" && state.taskSortDir === "asc";
     const allDone = ts.length && ts.every((t) => t.status === "Complete") && m.status !== "Complete";
     $("#drawer-body").innerHTML = `
-      ${statusSelect(m.status, `data-ms-status="${m.id}"`)}
+      <div class="drawer-tags">${statusSelect(m.status, `data-ms-status="${m.id}"`)} ${prioTag(m, true)}</div>
       <h2>${esc(m.title)}</h2>
       <div class="facts">
         <div class="fact"><div class="k">Owner</div><div class="v">${esc(m.owner || "Unassigned")}</div></div>
@@ -283,18 +306,28 @@
       <p class="muted" style="font-size:12px">Last updated ${ago(m.updated_at)}${m.updated_by ? " by " + esc(nameFor(m.updated_by)) : ""}</p>
 
       <div class="section-head"><h3>Tasks (${ts.length})</h3><button class="btn small" data-add-task="${m.id}">＋ Add task with details</button></div>
+      ${ts.length > 1 ? `<div class="task-sort">
+        <span class="muted">Sort tasks by</span>
+        <div class="sort-group">
+          <select id="task-sort-field" aria-label="Sort tasks by">
+            ${[["plan", "Plan order"], ["start_date", "Start date"], ["end_date", "End date"], ["priority", "Priority"]].map(([v, l]) => `<option value="${v}" ${v === state.taskSortField ? "selected" : ""}>${l}</option>`).join("")}
+          </select>
+          <button class="btn" type="button" id="task-sort-dir">${dirLabel(state.taskSortField, state.taskSortDir)}</button>
+        </div>
+        ${canMove ? "" : `<span class="muted hint">↑↓ reordering works in plan order</span>`}
+      </div>` : ""}
       ${ts.map((t, i) => `
         <div class="task ${S_CLASS[t.status]} ${t.status === "Complete" ? "done" : ""}" data-task="${t.id}">
           <div>
             <h4>${esc(t.title)}</h4>
-            <div class="meta"><span>👤 ${esc(t.owner || "Unassigned")}</span><span class="${isLate(t) ? "late" : ""}">📅 ${fmtRange(t.start_date, t.end_date)}${isLate(t) ? " · overdue" : ""}</span></div>
+            <div class="meta">${prioTag(t)}<span>👤 ${esc(t.owner || "Unassigned")}</span><span class="${isLate(t) ? "late" : ""}">📅 ${fmtRange(t.start_date, t.end_date)}${isLate(t) ? " · overdue" : ""}</span></div>
           </div>
           <div class="right">
             ${statusSelect(t.status, `data-task-status="${t.id}"`)}
             <div class="pct"><div class="bar"><span style="width:${pctOfTask(t)}%"></span></div>${pctOfTask(t)}%</div>
             <div class="row-actions">
-              <button class="btn ghost small" title="Move up" data-move="${t.id}" data-dir="-1" ${i === 0 ? "disabled" : ""}>↑</button>
-              <button class="btn ghost small" title="Move down" data-move="${t.id}" data-dir="1" ${i === ts.length - 1 ? "disabled" : ""}>↓</button>
+              <button class="btn ghost small" title="Move up" data-move="${t.id}" data-dir="-1" ${!canMove || i === 0 ? "disabled" : ""}>↑</button>
+              <button class="btn ghost small" title="Move down" data-move="${t.id}" data-dir="1" ${!canMove || i === ts.length - 1 ? "disabled" : ""}>↓</button>
               <button class="btn ghost small" title="Edit" data-edit-task="${t.id}">✎</button>
               <button class="btn danger-ghost small" title="Delete" data-del-task="${t.id}">🗑</button>
             </div>
@@ -326,6 +359,8 @@
         <label class="full">Milestone name<input type="text" name="title" required value="${esc(m.title)}"></label>
         <label>Owner<input type="text" name="owner" value="${esc(m.owner)}" placeholder="e.g. Vivek/Alberto"></label>
         <label>Status<select name="status">${opt(STATUSES, m.status)}</select></label>
+        <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
+        <div></div>
         <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}"></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(m.dependencies)}</textarea></label>
@@ -346,7 +381,7 @@
   }
 
   function taskForm(t, milestoneId) {
-    const isNew = !t; t = t || { status: "Not started", percent_done: 0, milestone_id: milestoneId };
+    const isNew = !t; t = t || { status: "Not started", percent_done: 0, milestone_id: milestoneId, priority: prio(milestoneById(milestoneId)) };
     modal(isNew ? "New task" : "Edit task", `
       <form id="tform" class="form-grid">
         <label class="full">Task<textarea name="title" required style="min-height:52px">${esc(t.title)}</textarea></label>
@@ -356,7 +391,7 @@
         <label>Start date<input type="date" name="start_date" value="${esc(t.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(t.end_date)}"></label>
         <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}"></label>
-        <div></div>
+        <label>Priority<select name="priority">${opt(PRIORITIES, prio(t))}</select></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(t.dependencies)}</textarea></label>
         <label class="full">Comments<textarea name="comments">${esc(t.comments)}</textarea></label>
         <div class="modal-actions full"><button type="button" class="btn" id="tcancel">Cancel</button><button class="btn primary" type="submit">${isNew ? "Add task" : "Save changes"}</button></div>
@@ -401,6 +436,7 @@
 
   // ---------- events ----------
   document.addEventListener("click", async (e) => {
+    if (e.target.closest("#task-sort-dir")) return setTaskSort(state.taskSortField, state.taskSortDir === "asc" ? "desc" : "asc");
     const el = e.target.closest("[data-tile],[data-open],[data-add-task],[data-edit-task],[data-del-task],[data-move],[data-ms-complete]");
     if (!el || e.target.closest("select")) return;
     if (el.dataset.tile) { state.tileFilter = state.tileFilter === el.dataset.tile ? null : el.dataset.tile; renderAll(); if (state.view === "activity") switchView("board"); return; }
@@ -426,6 +462,7 @@
 
   document.addEventListener("change", (e) => {
     const s = e.target;
+    if (s.id === "task-sort-field") return setTaskSort(s.value, state.taskSortDir);
     if (s.dataset.taskStatus) setTaskStatus(s.dataset.taskStatus, s.value);
     if (s.dataset.msStatus) setMilestoneStatus(s.dataset.msStatus, s.value);
   });
@@ -435,7 +472,7 @@
     e.preventDefault();
     const input = e.target.querySelector("input"); const title = input.value.trim(); if (!title) return;
     const mid = state.openId;
-    if (await save("pm_tasks", null, { milestone_id: mid, title, position: Math.max(0, ...tasksOf(mid).map((x) => x.position)) + 1 })) {
+    if (await save("pm_tasks", null, { milestone_id: mid, title, priority: prio(milestoneById(mid)), position: Math.max(0, ...tasksOf(mid).map((x) => x.position)) + 1 })) {
       toast("Task added"); setTimeout(() => { const i = $("#quick-add input"); if (i) i.focus(); }, 50);
     }
   });

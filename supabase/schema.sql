@@ -108,3 +108,7 @@ alter publication supabase_realtime add table public.pm_milestones, public.pm_ta
 
 -- First member (add others from the Team screen in the app):
 -- insert into public.pm_members(email) values ('you@example.com');
+
+-- v1.2.0: priority levels
+alter table public.pm_milestones add column if not exists priority text not null default 'Normal' check (priority in ('Critical','High','Normal','Low'));
+alter table public.pm_tasks add column if not exists priority text not null default 'Normal' check (priority in ('Critical','High','Normal','Low'));

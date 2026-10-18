@@ -54,6 +54,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid #b2ccff;border-color:#
 .brand small{display:block;color:var(--muted);font-size:12px}
 .brand.big strong{font-size:19px}
 .ver{display:inline-block;vertical-align:middle;margin-left:4px;font-size:11px;font-weight:700;color:var(--navy-2);background:#eaf1ff;border-radius:99px;padding:1px 7px;cursor:default}
+.prio{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;letter-spacing:.02em;white-space:nowrap;color:var(--pc);background:var(--pb);border:1px solid var(--pl)}
+.p-crit{--pc:#fff;--pb:#b42318;--pl:#b42318}
+.p-high{--pc:#b42318;--pb:#fef3f2;--pl:#fecdca}
+.p-norm{--pc:#475467;--pb:#f2f4f7;--pl:#e4e7ec}
+.p-low{--pc:#667085;--pb:#fff;--pl:#d0d5dd}
+.card .tags{margin-bottom:6px}
+.task .meta .prio{margin-right:2px}
+.drawer-tags{display:flex;align-items:center;gap:8px}
+.task-sort{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-2px 0 12px;font-size:13px}
+.task-sort select{font-size:13px;padding:5px 8px}
+.task-sort .btn{font-size:13px;padding:5px 10px}
+.task-sort .hint{font-size:12px}
 .logo{width:34px;height:34px;border-radius:9px;background:var(--navy);flex:none;position:relative}
 .logo::before{content:"";position:absolute;left:8px;right:8px;top:10px;height:3px;border-radius:2px;background:#fff;box-shadow:0 6px 0 -0px #fff,0 12px 0 0 #fff;width:18px}
 .topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:10px 24px}
