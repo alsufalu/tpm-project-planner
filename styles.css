@@ -226,7 +226,7 @@ tr.task-row td:first-child{padding-left:34px}
 .modal-wrap{position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:70;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:#fff;border-radius:14px;padding:22px;width:100%;max-width:560px;max-height:92vh;overflow:auto;box-shadow:0 20px 50px rgba(16,24,40,.25)}
 .modal h2{margin:0 0 14px;font-size:19px}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end} /* boxes in a row line up even if a label wraps */
 .form-grid .full{grid-column:1/-1}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
 .member{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f2f5;font-size:14px}
@@ -250,3 +250,6 @@ tr.task-row td:first-child{padding-left:34px}
   .drawer-body{padding:16px}
   .task{grid-template-columns:1fr}.task .right{align-items:flex-start;flex-direction:row;flex-wrap:wrap}
 }
+
+/* text boxes, date boxes and drop-downs share one height so side-by-side fields line up exactly */
+.form-grid input[type=text], .form-grid input[type=email], .form-grid input[type=date], .form-grid input[type=number], .form-grid select { height: 42px; }

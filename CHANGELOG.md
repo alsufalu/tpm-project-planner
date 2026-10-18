@@ -2,6 +2,9 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.5.2 — 2026-10-18
+- Edit forms: Phase lines up with Priority (shorter hint, and side-by-side boxes now align even when a label wraps).
+
 ## v1.5.1 — 2026-10-18
 - Key dates strip moved below the phase cards (just above the tabs) and slimmed to a single line of chips.
 

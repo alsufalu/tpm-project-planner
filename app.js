@@ -547,7 +547,7 @@
         <label>Owner<input type="text" name="owner" value="${esc(m.owner)}" placeholder="e.g. Vivek/Alberto"></label>
         <label><span>Status${!isNew && tasksOf(m.id).length ? ` <span class="muted hint-inline">· set by its tasks</span>` : ""}</span><select name="status" ${!isNew && tasksOf(m.id).length ? "disabled" : ""}>${opt(STATUSES, m.status)}</select></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
-        <label><span>Phase <span class="muted hint-inline">· groups milestones, e.g. Interior Construction</span></span><input type="text" name="phase" list="phase-list" value="${esc(m.phase)}" placeholder="None"><datalist id="phase-list">${allPhases().map((p) => `<option value="${esc(p)}">`).join("")}</datalist></label>
+        <label><span>Phase <span class="muted hint-inline">· groups milestones</span></span><input type="text" name="phase" list="phase-list" value="${esc(m.phase)}" placeholder="None"><datalist id="phase-list">${allPhases().map((p) => `<option value="${esc(p)}">`).join("")}</datalist></label>
         <label class="check full key-box"><input type="checkbox" name="key_date" ${m.key_date ? "checked" : ""}> ★ Key date — show this milestone in the Key dates strip</label>
         <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>
