@@ -13,7 +13,7 @@
   };
 
   const state = {
-    session: null, milestones: [], tasks: [], members: [], activity: [],
+    session: null, milestones: [], tasks: [], members: [], activity: [], attachments: [],
     view: "board", q: "", owner: "", hideComplete: false, tileFilter: null,
     openId: null, authMode: "signin", recovering: false,
     sortField: "plan", sortDir: "asc",          // main views
@@ -88,6 +88,69 @@
   }
   const milestoneById = (id) => state.milestones.find((m) => m.id === id);
 
+  // ---------- attachments ----------
+  // Files live in the private Supabase Storage bucket "pm-attachments"; only team members can reach them.
+  const BUCKET = "pm-attachments";
+  const MAX_BYTES = 50 * 1024 * 1024;
+  const filesOf = (taskId) => state.attachments.filter((a) => a.task_id === taskId);
+  const filesOfMilestone = (mid) => { const ids = new Set(tasksOf(mid).map((t) => t.id)); return state.attachments.filter((a) => ids.has(a.task_id)); };
+  const fmtSize = (b) => b == null ? "" : b < 1024 ? b + " B" : b < 1048576 ? Math.round(b / 1024) + " KB" : (b / 1048576).toFixed(1) + " MB";
+  const fileIcon = (name) => { const ext = (name.split(".").pop() || "").toLowerCase();
+    return ({ pdf: "📕", doc: "📘", docx: "📘", xls: "📗", xlsx: "📗", csv: "📗", ppt: "📙", pptx: "📙", png: "🖼", jpg: "🖼", jpeg: "🖼", gif: "🖼", webp: "🖼", heic: "🖼", dwg: "📐", zip: "🗜" })[ext] || "📄"; };
+  const safeName = (n) => n.normalize("NFKD").replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "_").slice(-120) || "file";
+
+  async function uploadFiles(taskId, fileList) {
+    const files = [...fileList];
+    for (const f of files) {
+      if (f.size > MAX_BYTES) { toast(`“${f.name}” is over 50 MB and can't be attached.`, true); continue; }
+      toast(`Uploading ${f.name}…`);
+      const path = `${taskId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName(f.name)}`;
+      const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false });
+      if (up.error) { toast(`Upload failed for ${f.name}: ${up.error.message}`, true); continue; }
+      const ins = await sb.from("pm_attachments").insert({ task_id: taskId, file_name: f.name, storage_path: path, size_bytes: f.size, content_type: f.type || null });
+      if (ins.error) { await sb.storage.from(BUCKET).remove([path]); toast(`Couldn't save ${f.name}: ${ins.error.message}`, true); continue; }
+    }
+    await loadAll();
+    if (files.length) toast(files.length > 1 ? `${files.length} files attached` : "File attached");
+  }
+  async function openFile(id) {
+    const a = state.attachments.find((x) => x.id === id); if (!a) return;
+    const w = window.open("about:blank", "_blank"); // open now, so pop-up blockers allow it
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(a.storage_path, 3600);
+    if (error) { if (w) w.close(); return toast("Couldn't open file: " + error.message, true); }
+    if (w) w.location.href = data.signedUrl; else window.location.href = data.signedUrl;
+  }
+  async function downloadFile(id) {
+    const a = state.attachments.find((x) => x.id === id); if (!a) return;
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(a.storage_path, 3600, { download: a.file_name });
+    if (error) return toast("Couldn't download file: " + error.message, true);
+    const link = document.createElement("a"); link.href = data.signedUrl; link.download = a.file_name; document.body.appendChild(link); link.click(); link.remove();
+  }
+  async function removeFiles(list) {
+    if (!list.length) return true;
+    const st = await sb.storage.from(BUCKET).remove(list.map((a) => a.storage_path));
+    if (st.error) { toast("Couldn't remove file: " + st.error.message, true); return false; }
+    const db = await sb.from("pm_attachments").delete().in("id", list.map((a) => a.id));
+    if (db.error) { toast("Couldn't remove file: " + db.error.message, true); return false; }
+    return true;
+  }
+  function filesHTML(t) {
+    const fs = filesOf(t.id);
+    return `<div class="files" data-filedrop="${t.id}">
+      ${fs.map((a) => `<div class="file">
+        <span class="ficon">${fileIcon(a.file_name)}</span>
+        <button class="fname link" data-file-open="${a.id}" title="Open in a new tab">${esc(a.file_name)}</button>
+        <span class="muted fmeta">${fmtSize(a.size_bytes)} · ${esc(nameFor(a.uploaded_by))} · ${ago(a.created_at)}</span>
+        <span class="factions">
+          <button class="btn ghost small" data-file-open="${a.id}" title="Open in a new tab">↗ Open</button>
+          <button class="btn ghost small" data-file-dl="${a.id}" title="Download">⬇</button>
+          <button class="btn danger-ghost small" data-file-del="${a.id}" title="Remove file">✕</button>
+        </span>
+      </div>`).join("")}
+      <label class="attach-btn" title="Attach files (or drag them onto this task)">📎 Attach file<input type="file" multiple hidden data-attach="${t.id}"></label>
+    </div>`;
+  }
+
   // ---------- sorting ----------
   // Plan order = the order in the original plan. Date sorts put items with no date at the bottom either way.
   function planKey(x) {
@@ -150,14 +213,15 @@
 
   // ---------- data ----------
   async function loadAll() {
-    const [ms, ts, mem] = await Promise.all([
+    const [ms, ts, mem, at] = await Promise.all([
       sb.from("pm_milestones").select("*").order("position"),
       sb.from("pm_tasks").select("*").order("position"),
       sb.from("pm_members").select("*").order("created_at"),
+      sb.from("pm_attachments").select("*").order("created_at"),
     ]);
     const err = ms.error || ts.error || mem.error;
     if (err) { toast("Couldn't load data: " + err.message, true); return; }
-    state.milestones = ms.data; state.tasks = ts.data; state.members = mem.data;
+    state.milestones = ms.data; state.tasks = ts.data; state.members = mem.data; state.attachments = at.error ? [] : at.data;
     renderAll();
   }
   async function loadActivity() {
@@ -191,6 +255,7 @@
     realtime = sb.channel("pm-planner")
       .on("postgres_changes", { event: "*", schema: "public", table: "pm_milestones" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "pm_tasks" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pm_attachments" }, refresh)
       .subscribe();
   }
 
@@ -249,7 +314,7 @@
       ${prioTag(m) ? `<div class="tags">${prioTag(m)}</div>` : ""}<h4>${esc(m.title)}</h4>
       <div class="meta"><span>👤 ${esc(m.owner || "Unassigned")}</span>${dateLine(m)}</div>
       <div class="prog"><div class="bar"><span style="width:${p.pct}%"></span></div><span>${p.total ? `${p.done}/${p.total} tasks` : "No tasks"}</span></div>
-      ${chips ? `<div class="chips">${chips}</div>` : ""}
+      ${chips || filesOfMilestone(m.id).length ? `<div class="chips">${chips}${filesOfMilestone(m.id).length ? `<span class="chip clip" title="Attached files">📎 ${filesOfMilestone(m.id).length}</span>` : ""}</div>` : ""}
     </div>`;
   }
   function taskCard(t) {
@@ -257,7 +322,7 @@
     return `<div class="card ${S_CLASS[t.status]}" draggable="true" data-open="${t.milestone_id}" data-focus="${t.id}" data-drag="${t.id}">
       <div class="parent">${esc(m ? m.title : "")}</div>
       ${prioTag(t) ? `<div class="tags">${prioTag(t)}</div>` : ""}<h4>${esc(t.title)}</h4>
-      <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span>${dateLine(t)}${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}</div>
+      <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span>${dateLine(t)}${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}${filesOf(t.id).length ? `<span title="Attached files">📎 ${filesOf(t.id).length}</span>` : ""}</div>
     </div>`;
   }
 
@@ -288,7 +353,7 @@
       const m = a.milestone_id && milestoneById(a.milestone_id);
       if (a.entity === "plan") return `<div class="act"><time title="${new Date(a.at).toLocaleString()}">${ago(a.at)}</time><div><strong>Planner update:</strong> ${esc(a.action)}</div></div>`;
       const what = `${a.entity} <strong>${esc(a.title)}</strong>`;
-      return `<div class="act"><time title="${new Date(a.at).toLocaleString()}">${ago(a.at)}</time><div><strong>${esc(nameFor(a.actor))}</strong> ${esc(a.action)} ${what}${m && a.entity === "task" ? ` in <a data-open="${m.id}">${esc(m.title)}</a>` : m ? ` · <a data-open="${m.id}">open</a>` : ""}</div></div>`;
+      return `<div class="act"><time title="${new Date(a.at).toLocaleString()}">${ago(a.at)}</time><div><strong>${esc(nameFor(a.actor))}</strong> ${esc(a.action)} ${what}${m && (a.entity === "task" || a.entity === "file") ? ` in <a data-open="${m.id}">${esc(m.title)}</a>` : m ? ` · <a data-open="${m.id}">open</a>` : ""}</div></div>`;
     }).join("") || `<div class="empty">No changes recorded yet. Edits made in the planner will show up here.</div>`}</div>`;
   }
 
@@ -354,6 +419,7 @@
             </div>
           </div>
           ${t.dependencies || t.comments ? `<div class="extra">${t.dependencies ? `<b>Depends on:</b> ${esc(t.dependencies)}` : ""}${t.dependencies && t.comments ? "<br>" : ""}${t.comments ? `<b>Comments:</b> ${esc(t.comments)}` : ""}</div>` : ""}
+          ${filesHTML(t)}
         </div>`).join("") || `<div class="empty">No tasks yet — add the first one below.</div>`}
       <form class="quick-add" id="quick-add"><input type="text" placeholder="Quick add a task… (press Enter)" required><button class="btn primary" type="submit">Add</button></form>`;
   }
@@ -485,6 +551,14 @@
   // ---------- events ----------
   document.addEventListener("click", async (e) => {
     if (e.target.closest("#task-sort-dir")) return setTaskSort(state.taskSortField, state.taskSortDir === "asc" ? "desc" : "asc");
+    const f = e.target.closest("[data-file-open],[data-file-dl],[data-file-del]");
+    if (f) {
+      if (f.dataset.fileOpen) return openFile(f.dataset.fileOpen);
+      if (f.dataset.fileDl) return downloadFile(f.dataset.fileDl);
+      const a = state.attachments.find((x) => x.id === f.dataset.fileDel);
+      if (a && await confirmBox("Remove file?", `“${esc(a.file_name)}” will be deleted for everyone.`, "Remove")) { if (await removeFiles([a])) { await loadAll(); toast("File removed"); } }
+      return;
+    }
     const el = e.target.closest("[data-tile],[data-open],[data-add-task],[data-edit-task],[data-del-task],[data-move],[data-ms-complete]");
     if (!el || e.target.closest("select")) return;
     if (el.dataset.tile) { state.tileFilter = state.tileFilter === el.dataset.tile ? null : el.dataset.tile; renderAll(); if (state.view === "activity") switchView("board"); return; }
@@ -493,7 +567,10 @@
     if (el.dataset.msComplete) return setMilestoneStatus(el.dataset.msComplete, "Complete");
     if (el.dataset.delTask) {
       const t = state.tasks.find((x) => x.id === el.dataset.delTask);
-      if (await confirmBox("Delete task?", `“${esc(t.title)}” will be removed for everyone.`)) { if (await remove("pm_tasks", t.id)) toast("Task deleted"); }
+      const nf = filesOf(t.id).length;
+      if (await confirmBox("Delete task?", `“${esc(t.title)}”${nf ? ` and its ${nf} attached file${nf > 1 ? "s" : ""}` : ""} will be removed for everyone.`)) {
+        if (await removeFiles(filesOf(t.id)) && await remove("pm_tasks", t.id)) toast("Task deleted");
+      }
       return;
     }
     if (el.dataset.move) {
@@ -510,6 +587,7 @@
 
   document.addEventListener("change", (e) => {
     const s = e.target;
+    if (s.dataset && s.dataset.attach) { const files = s.files; if (files && files.length) uploadFiles(s.dataset.attach, files); s.value = ""; return; }
     if (s.id === "task-sort-field") return setTaskSort(s.value, state.taskSortDir);
     if (s.dataset.taskStatus) setTaskStatus(s.dataset.taskStatus, s.value);
     if (s.dataset.msStatus) setMilestoneStatus(s.dataset.msStatus, s.value);
@@ -524,6 +602,12 @@
       toast("Task added"); setTimeout(() => { const i = $("#quick-add input"); if (i) i.focus(); }, 50);
     }
   });
+
+  // drag files from the computer onto a task in the drawer to attach them
+  const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+  document.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); const t = e.target.closest("[data-task]"); if (!t) { e.dataTransfer.dropEffect = "none"; return; } $$(".task.filedrop").forEach((x) => x !== t && x.classList.remove("filedrop")); t.classList.add("filedrop"); });
+  document.addEventListener("dragleave", (e) => { const t = e.target.closest("[data-task]"); if (t && !t.contains(e.relatedTarget)) t.classList.remove("filedrop"); });
+  document.addEventListener("drop", (e) => { if (!hasFiles(e)) return; const t = e.target.closest("[data-task]"); e.preventDefault(); $$(".task.filedrop").forEach((x) => x.classList.remove("filedrop")); if (t) uploadFiles(t.dataset.task, e.dataTransfer.files); });
 
   // drag & drop between status columns
   let dragId = null;
@@ -562,9 +646,9 @@
   $("#add-milestone").onclick = () => milestoneForm(null);
   $("#edit-milestone").onclick = () => milestoneForm(milestoneById(state.openId));
   $("#delete-milestone").onclick = async () => {
-    const m = milestoneById(state.openId); const n = tasksOf(m.id).length;
-    if (await confirmBox("Delete milestone?", `“${esc(m.title)}”${n ? ` and its ${n} task${n > 1 ? "s" : ""}` : ""} will be removed for everyone. This can't be undone.`)) {
-      if (await remove("pm_milestones", m.id)) { closeDrawer(); toast("Milestone deleted"); }
+    const m = milestoneById(state.openId); const n = tasksOf(m.id).length; const nf = filesOfMilestone(m.id).length;
+    if (await confirmBox("Delete milestone?", `“${esc(m.title)}”${n ? ` and its ${n} task${n > 1 ? "s" : ""}` : ""}${nf ? ` (with ${nf} attached file${nf > 1 ? "s" : ""})` : ""} will be removed for everyone. This can't be undone.`)) {
+      if (await removeFiles(filesOfMilestone(m.id)) && await remove("pm_milestones", m.id)) { closeDrawer(); toast("Milestone deleted"); }
     }
   };
   $("#drawer-close").onclick = closeDrawer;

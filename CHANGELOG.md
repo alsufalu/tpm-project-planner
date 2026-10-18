@@ -2,6 +2,11 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.4.0 — 2026-10-18
+- File attachments on tasks. In a milestone's task list, click "📎 Attach file" (or drag files from your computer onto a task). Files are stored privately in Supabase Storage; only team members can see them.
+- Click a file name or "↗ Open" to open it in a new browser tab; ⬇ downloads it; ✕ removes it for everyone. Up to 50 MB per file.
+- Cards show a 📎 count; uploads and removals appear in Recent changes. Deleting a task or milestone also deletes its files.
+
 ## v1.3.2 — 2026-10-18
 - Edit forms: field hints ("set by its tasks", etc.) sit on the same line as the label, so Status lines up with Owner and Review date with Completed on.
 

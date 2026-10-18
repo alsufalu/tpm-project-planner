@@ -165,3 +165,20 @@ begin
 end $$;
 create trigger pm_tasks_rollup after insert or delete or update of status, milestone_id on public.pm_tasks
 for each row execute function public.pm_task_rollup();
+
+-- v1.4.0: task attachments (Supabase Storage bucket "pm-attachments", private, 50 MB per file)
+-- insert into storage.buckets (id, name, public, file_size_limit) values ('pm-attachments','pm-attachments',false,52428800);
+-- storage.objects policies: select/insert/update/delete to authenticated where bucket_id = 'pm-attachments' and public.pm_is_member()
+create table public.pm_attachments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.pm_tasks(id) on delete cascade,
+  file_name text not null,
+  storage_path text not null unique,
+  size_bytes bigint,
+  content_type text,
+  uploaded_by text default lower(auth.jwt()->>'email'),
+  created_at timestamptz not null default now()
+);
+alter table public.pm_attachments enable row level security;
+create policy pm_attachments_all on public.pm_attachments for all to authenticated
+  using (public.pm_is_member()) with check (public.pm_is_member());

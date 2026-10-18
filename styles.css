@@ -74,6 +74,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid #b2ccff;border-color:#
 .ongoing-box{padding:8px 10px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;color:#4c1d95}
 .ongoing-box input{width:auto}
 input:disabled{background:#f2f4f7;color:#98a2b3}
+.files{grid-column:1/-1;display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line);padding-top:8px}
+.file{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 6px;border-radius:8px;background:#f9fafb}
+.file .ficon{flex:none}
+.file .fname{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--navy-2);font-weight:600;padding:0}
+.file .fmeta{font-size:12px;white-space:nowrap}
+.file .factions{display:flex;gap:2px;flex:none}
+.attach-btn{align-self:flex-start;display:inline-flex;flex-direction:row;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--navy-2);cursor:pointer;padding:4px 8px;border-radius:8px}
+.attach-btn:hover{background:#eef4ff}
+.task.filedrop{outline:2px dashed var(--ip);background:var(--ip-bg)}
+.chip.clip{--c:#475467;--cb:#f2f4f7}
+@media (max-width:700px){.file{flex-wrap:wrap}.file .fmeta{order:3;width:100%}}
 .logo{width:34px;height:34px;border-radius:9px;background:var(--navy);flex:none;position:relative}
 .logo::before{content:"";position:absolute;left:8px;right:8px;top:10px;height:3px;border-radius:2px;background:#fff;box-shadow:0 6px 0 -0px #fff,0 12px 0 0 #fff;width:18px}
 .topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:10px 24px}
