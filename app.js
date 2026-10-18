@@ -359,8 +359,13 @@
   }
 
   // ---------- modals ----------
+  // Forms only close via Cancel/Save (or Esc / clicking outside when nothing was typed),
+  // so a text selection that ends outside the box can't throw away someone's edits.
+  let modalDirty = false;
   function modal(title, bodyHTML) {
     $("#modal-title").textContent = title; $("#modal-body").innerHTML = bodyHTML;
+    modalDirty = false;
+    $$("#modal-body form").forEach((f) => { f.addEventListener("input", () => { modalDirty = true; }); f.addEventListener("change", () => { modalDirty = true; }); });
     $("#modal-wrap").classList.remove("hidden");
     setTimeout(() => { const f = $("#modal-body input, #modal-body textarea"); if (f) f.focus(); }, 30);
   }
@@ -433,7 +438,7 @@
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${t.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
         <label>Review date <span class="muted hint-inline">optional, for ongoing items</span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
         <label>Completed on <span class="muted hint-inline">filled in automatically</span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
-        <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}"></label>
+        <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}" onfocus="this.select()"></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(t))}</select></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(t.dependencies)}</textarea></label>
         <label class="full">Comments<textarea name="comments">${esc(t.comments)}</textarea></label>
@@ -564,8 +569,20 @@
   };
   $("#drawer-close").onclick = closeDrawer;
   $("#drawer-scrim").onclick = closeDrawer;
-  $("#modal-wrap").onclick = (e) => { if (e.target.id === "modal-wrap") closeModal(); };
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!$("#modal-wrap").classList.contains("hidden")) closeModal(); else if (state.openId) closeDrawer(); } });
+  let downOnBackdrop = false;
+  $("#modal-wrap").addEventListener("mousedown", (e) => { downOnBackdrop = e.target.id === "modal-wrap"; });
+  $("#modal-wrap").onclick = (e) => {
+    if (e.target.id !== "modal-wrap" || !downOnBackdrop) return; // drag that ended outside the box
+    if (modalDirty) return toast("You have unsaved changes — use Save or Cancel.", true);
+    closeModal();
+  };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#modal-wrap").classList.contains("hidden")) {
+      if (modalDirty) return toast("You have unsaved changes — use Save or Cancel.", true);
+      closeModal();
+    } else if (state.openId) closeDrawer();
+  });
   $("#team-btn").onclick = teamModal;
 
   // ---------- auth ----------

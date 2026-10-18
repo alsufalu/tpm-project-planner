@@ -2,6 +2,10 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.3.1 — 2026-10-18
+- Fix: the Edit/New windows no longer close by themselves when a text selection (e.g. selecting the "0" in % done) ends outside the box. Clicking outside or pressing Esc only closes the window if nothing was typed; otherwise use Save or Cancel.
+- Clicking into "% done" selects the number so you can type over it.
+
 ## v1.3.0 — 2026-10-18
 - Ongoing items: tick "Ongoing" on a milestone or task for work with a start date but no end date. It shows "🔁 Ongoing since …", is never counted overdue, and gets its end date the day it's marked Complete.
 - Optional review date for ongoing items; once it passes, the item is flagged and counted under Overdue.
