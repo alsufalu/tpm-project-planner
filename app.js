@@ -342,7 +342,7 @@
       const days = target ? daysBetween(today().toISOString().slice(0, 10), target) : null;
       const when = done ? "✓ done" : days == null ? "" : days > 0 ? `in ${days} day${days === 1 ? "" : "s"}` : days === 0 ? "today" : `${-days} days ago`;
       return `<button class="kd ${done ? "done" : isLate(x) ? "late-kd" : ""}" data-open="${mid}" ${tid ? `data-focus="${tid}"` : ""} title="${esc(x.title)}">
-        <span class="kd-title">${esc(x.title.split("\n")[0])}</span><span class="kd-date">${keyRange(x)}</span>${when ? `<span class="kd-when">${when}</span>` : ""}</button>`;
+        <span class="kd-title">${esc(x.title.split("\n")[0])}</span><span class="kd-date">${keyRange(x)}</span>${when ? `<span class="kd-when">· ${when}</span>` : ""}</button>`;
     }).join("");
   }
 

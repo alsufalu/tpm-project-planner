@@ -2,6 +2,9 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.5.1 — 2026-10-18
+- Key dates strip moved below the phase cards (just above the tabs) and slimmed to a single line of chips.
+
 ## v1.5.0 — 2026-10-18
 - Phases: milestones can belong to a phase (e.g. "Interior Construction"). A row of phase cards shows each phase's overall progress, task count, date span and whether anything needs attention; click a card (or use the new phase menu) to show only that phase. Summary tiles follow the selected phase.
 - Key dates: tick "★ Key date" on a milestone or task to show it in a Key dates strip with a countdown (e.g. "in 201 days").
