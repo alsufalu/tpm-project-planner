@@ -286,6 +286,7 @@
     if (state.view === "board") renderBoard();
     if (state.view === "tasks") renderTaskBoard();
     if (state.view === "list") renderList();
+    if (state.view === "reports") renderReports();
     if (state.openId) renderDrawer();
   }
 
@@ -424,6 +425,166 @@
       ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${prioTag(t, true)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${t.ongoing ? "Ongoing" : fmtD(t.end_date)}</td><td class="num">${t.status === "Complete" && t.completed_on ? "✓ " + fmtD(t.completed_on) : pctOfTask(t) + "%"}</td></tr>`));
     });
     $("#view-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Milestone / task</th><th>Priority</th><th>Owner</th><th>Status</th><th>Start</th><th>End</th><th>Done</th></tr></thead><tbody>${rows.join("") || `<tr><td colspan="7" class="empty">Nothing matches your filters</td></tr>`}</tbody></table></div>`;
+  }
+
+  // =====================================================================
+  // REPORTS: 1) Project status report  2) Timeline (Gantt)  3) Workload & look-ahead
+  // Reports respect the phase / person filters and "Hide complete".
+  // =====================================================================
+  state.report = "status"; state.horizon = 14;
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate() + n); return iso(d); };
+  const todayIso = () => { const d = today(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const P_ORDER = (x) => P_RANK[prio(x)];
+  // Health: red = a key date or a Critical/High item is overdue; amber = anything overdue / review due; green = on track.
+  function health(ms) {
+    const ts = ms.flatMap((m) => tasksOf(m.id));
+    const all = [...ms, ...ts];
+    if (all.length && all.every((x) => x.status === "Complete")) return { key: "done", label: "Complete", icon: "✓" };
+    if (all.some((x) => isLate(x) && (x.key_date || P_ORDER(x) <= 1))) return { key: "red", label: "At risk", icon: "▲" };
+    if (all.some(needsAttention)) return { key: "amber", label: "Watch", icon: "●" };
+    return { key: "green", label: "On track", icon: "✓" };
+  }
+  const healthBadge = (h) => `<span class="health h-${h.key}"><span aria-hidden="true">${h.icon}</span> ${h.label}</span>`;
+  const repMilestones = () => state.milestones.filter((m) => phaseMatch(m) && ownerMatchM(m));
+  const ownerMatchM = (m) => !state.owner || ownerMatch(m.owner) || tasksOf(m.id).some((t) => ownerMatch(t.owner));
+  const repTasks = () => state.tasks.filter((t) => { const m = milestoneById(t.milestone_id); return phaseMatch(m) && ownerMatch(t.owner || (m && m.owner)); });
+  const taskLine = (t, extra = "") => { const m = milestoneById(t.milestone_id);
+    return `<li data-open="${t.milestone_id}" data-focus="${t.id}"><span class="rl-main">${t.key_date ? "★ " : ""}${esc(t.title.split("\n")[0])}</span>
+      <span class="rl-sub">${esc(m ? m.title : "")} · 👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}${extra}</span></li>`; };
+  const scopeLine = () => [state.phase ? (state.phase === NO_PHASE ? "Other (no phase)" : state.phase) : "All phases", state.owner || "Everyone"].join(" · ");
+
+  function renderReports() {
+    const tabs = [["status", "Project status report"], ["timeline", "Timeline (Gantt)"], ["workload", "Workload & look-ahead"]];
+    const body = state.report === "timeline" ? reportTimeline() : state.report === "workload" ? reportWorkload() : reportStatus();
+    $("#view-reports").innerHTML = `
+      <div class="rep-bar no-print">
+        <div class="tabs">${tabs.map(([k, l]) => `<button data-report="${k}" class="${state.report === k ? "active" : ""}">${l}</button>`).join("")}</div>
+        <div class="rep-actions">
+          ${state.report === "status" || state.report === "workload" ? `<label class="check">Look ahead
+            <select id="rep-horizon">${[7, 14, 30, 60].map((n) => `<option value="${n}" ${state.horizon === n ? "selected" : ""}>${n} days</option>`).join("")}</select></label>` : ""}
+          <button class="btn" id="rep-print">🖨 Print / Save as PDF</button>
+        </div>
+      </div>
+      <article class="report">${body}</article>`;
+  }
+
+  // ---------- 1. Project status report ----------
+  function reportStatus() {
+    const ms = repMilestones(), ts = repTasks(), t0 = todayIso(), until = addDays(t0, state.horizon), since = addDays(t0, -state.horizon);
+    const pct = ts.length ? Math.round(ts.reduce((a, t) => a + pctOfTask(t), 0) / ts.length) : 0;
+    const h = health(ms);
+    const done = ts.filter((t) => t.status === "Complete").length;
+    const overdue = ts.filter(needsAttention).sort((a, b) => P_ORDER(a) - P_ORDER(b) || (a.end_date || "").localeCompare(b.end_date || ""));
+    const recent = ts.filter((t) => t.status === "Complete" && t.completed_on && t.completed_on >= since).sort((a, b) => b.completed_on.localeCompare(a.completed_on));
+    const upcoming = ts.filter((t) => t.status !== "Complete" && !isLate(t) && ((t.end_date && t.end_date >= t0 && t.end_date <= until) || (t.start_date && t.start_date >= t0 && t.start_date <= until)))
+      .sort((a, b) => (a.start_date || a.end_date || "").localeCompare(b.start_date || b.end_date || ""));
+    const keys = [...ms.filter((m) => m.key_date), ...ts.filter((t) => t.key_date)].sort((a, b) => (a.start_date || a.end_date || "9").localeCompare(b.start_date || b.end_date || "9"));
+    const phases = [...new Set(ms.map(phaseOf))].sort((a, b) => Math.min(...ms.filter((m) => phaseOf(m) === a).map((m) => m.position)) - Math.min(...ms.filter((m) => phaseOf(m) === b).map((m) => m.position)));
+    const opening = state.tasks.find((t) => /grand opening/i.test(t.title)) || state.milestones.find((m) => /official opening/i.test(m.title));
+    const daysToOpen = opening && opening.start_date ? daysBetween(t0, opening.start_date) : null;
+    return `
+      <header class="rep-head">
+        <div><h2>Project status report</h2><div class="muted">${esc(cfg.projectName)} · ${esc(scopeLine())} · ${today().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · prepared by ${esc(nameFor(state.session?.user?.email))}</div></div>
+        ${healthBadge(h)}
+      </header>
+      <section class="rep-kpis">
+        <div class="kpi"><div class="k">Overall progress</div><div class="v">${pct}%</div><div class="bar"><span style="width:${pct}%"></span></div></div>
+        <div class="kpi"><div class="k">Tasks complete</div><div class="v">${done}<span class="of">/${ts.length}</span></div></div>
+        <div class="kpi"><div class="k">Overdue / review due</div><div class="v ${overdue.length ? "late" : ""}">${overdue.length}</div></div>
+        <div class="kpi"><div class="k">${opening ? "Days to grand opening" : "Due next " + state.horizon + " days"}</div><div class="v">${opening && daysToOpen != null ? daysToOpen : upcoming.length}</div>${opening && opening.start_date ? `<div class="muted small">${fmtD(opening.start_date)}</div>` : ""}</div>
+      </section>
+
+      <h3>Status by phase</h3>
+      <div class="table-wrap"><table class="rep-table">
+        <thead><tr><th>Phase</th><th>Health</th><th>Progress</th><th>Tasks done</th><th>Dates</th><th>Overdue</th></tr></thead>
+        <tbody>${phases.map((ph) => { const list = ms.filter((m) => phaseOf(m) === ph); const st = phaseStats(list); const pts = list.flatMap((m) => tasksOf(m.id));
+          return `<tr data-phase="${esc(ph || NO_PHASE)}" class="clickable"><td><strong>${esc(ph || "Other (no phase)")}</strong></td><td>${healthBadge(health(list))}</td>
+            <td><div class="mini-bar"><div class="bar"><span style="width:${st.pct}%"></span></div>${st.pct}%</div></td><td class="num">${st.done}/${st.total}</td>
+            <td class="num">${st.start ? fmtShort(st.start) : "—"} – ${st.end ? fmtShort(st.end) : "—"}</td><td class="num ${pts.filter(needsAttention).length ? "late" : ""}">${pts.filter(needsAttention).length || "—"}</td></tr>`; }).join("")}</tbody>
+      </table></div>
+
+      ${keys.length ? `<h3>Key dates</h3><ul class="rep-list keys">${keys.map((k) => { const target = k.end_date || k.start_date; const d = target ? daysBetween(t0, target) : null;
+        return `<li data-open="${k.milestone_id || k.id}" ${k.milestone_id ? `data-focus="${k.id}"` : ""}><span class="rl-main">★ ${esc(k.title.split("\n")[0])}</span>
+          <span class="rl-sub">${keyRange(k)} · ${k.status === "Complete" ? `<span class="ok">✓ done</span>` : isLate(k) ? `<span class="late">missed by ${-d} days</span>` : d == null ? "no date" : `in ${d} days`}</span></li>`; }).join("")}</ul>` : ""}
+
+      <div class="rep-cols">
+        <section><h3>✓ Completed in the last ${state.horizon} days <span class="count">${recent.length}</span></h3>
+          ${recent.length ? `<ul class="rep-list">${recent.map((t) => taskLine(t, ` · ✓ ${fmtD(t.completed_on)}`)).join("")}</ul>` : `<p class="muted">Nothing marked complete in this period.</p>`}</section>
+        <section><h3>→ Coming up in the next ${state.horizon} days <span class="count">${upcoming.length}</span></h3>
+          ${upcoming.length ? `<ul class="rep-list">${upcoming.map((t) => taskLine(t, ` · ${t.start_date && t.start_date >= t0 ? "starts " + fmtD(t.start_date) : "due " + fmtD(t.end_date)}`)).join("")}</ul>` : `<p class="muted">Nothing starting or due in this period.</p>`}</section>
+      </div>
+
+      <h3>⚠ Overdue &amp; needs attention <span class="count">${overdue.length}</span></h3>
+      ${overdue.length ? `<ul class="rep-list">${overdue.map((t) => taskLine(t, ` · ${prioTag(t)} <span class="late">${reviewDue(t) ? "review was due " + fmtD(t.review_date) : "was due " + fmtD(t.end_date) + " (" + daysBetween(t.end_date, t0) + " days)"}</span>`)).join("")}</ul>` : `<p class="muted">Nothing overdue. 🎉</p>`}
+      <p class="muted small rep-foot">Health: <b>On track</b> = nothing overdue · <b>Watch</b> = something overdue or a review is due · <b>At risk</b> = a key date or a Critical/High item is overdue.</p>`;
+  }
+
+  // ---------- 2. Timeline (Gantt) ----------
+  function reportTimeline() {
+    const ms = repMilestones().filter((m) => !state.hideComplete || m.status !== "Complete");
+    const dated = ms.filter((m) => m.start_date || m.end_date);
+    if (!dated.length) return `<header class="rep-head"><h2>Timeline</h2></header><p class="muted">No dated milestones for this selection.</p>`;
+    const t0 = todayIso();
+    let lo = dated.map((m) => m.start_date || m.end_date).sort()[0], hi = dated.map((m) => m.end_date || m.start_date).sort().slice(-1)[0];
+    if (t0 < lo) lo = t0; if (t0 > hi) hi = t0;
+    const a = parseD(lo), b = parseD(hi); a.setDate(1); b.setMonth(b.getMonth() + 1, 1);
+    const span = (b - a) / 86400000;
+    const x = (s) => ((parseD(s) - a) / 86400000) / span * 100;
+    const months = []; for (const d = new Date(a); d < b; d.setMonth(d.getMonth() + 1)) months.push(new Date(d));
+    const monthCells = months.map((d) => { const s = iso(new Date(d.getFullYear(), d.getMonth(), 1)); const e = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      return `<div class="g-month" style="left:${x(s)}%;width:${((e - d) / 86400000) / span * 100}%"><span>${d.toLocaleDateString(undefined, { month: "short" })}${d.getMonth() === 0 || d.getTime() === months[0].getTime() ? " " + d.getFullYear() : ""}</span></div>`; }).join("");
+    const grid = months.map((d) => `<div class="g-line" style="left:${x(iso(new Date(d.getFullYear(), d.getMonth(), 1)))}%"></div>`).join("");
+    const todayLine = `<div class="g-today" style="left:${x(t0)}%"><span>Today</span></div>`;
+    const phases = [...new Set(ms.map(phaseOf))].sort((p, q) => Math.min(...ms.filter((m) => phaseOf(m) === p).map((m) => m.position)) - Math.min(...ms.filter((m) => phaseOf(m) === q).map((m) => m.position)));
+    const rows = phases.map((ph) => {
+      const list = sortItems(ms.filter((m) => phaseOf(m) === ph), "start_date", "asc");
+      const st = phaseStats(list);
+      const phRow = st.start && st.end ? `<div class="g-row g-phase"><div class="g-label"><strong>${esc(ph || "Other (no phase)")}</strong><span class="muted">${st.pct}%</span></div>
+        <div class="g-track">${grid}<div class="g-phasebar" style="left:${x(st.start)}%;width:${Math.max(0.4, x(st.end) - x(st.start))}%"></div></div></div>` : "";
+      return phRow + list.map((m) => {
+        const s = m.start_date || m.end_date, e = m.ongoing ? (hi > t0 ? hi : t0) : (m.end_date || m.start_date);
+        const p = progress(m), late = isLate(m);
+        const keyMarks = tasksOf(m.id).filter((t) => t.key_date && (t.end_date || t.start_date)).map((t) => { const kd = t.title.match(/grand opening/i) ? (t.start_date || t.end_date) : (t.end_date || t.start_date);
+          return `<span class="g-key" style="left:${x(kd)}%" title="★ ${esc(t.title.split("\n")[0])} · ${fmtD(kd)}">◆</span>`; }).join("");
+        const tip = `${m.title}\n${m.ongoing ? "Ongoing since " + fmtD(m.start_date) : fmtD(s) + " → " + fmtD(e)}\n${m.status} · ${p.pct}% · ${p.done}/${p.total} tasks${late ? "\nOVERDUE" : ""}`;
+        return `<div class="g-row" data-open="${m.id}"><div class="g-label" title="${esc(m.title)}">${m.key_date ? "★ " : ""}${esc(m.title)}</div>
+          <div class="g-track">${grid}${s ? `<div class="g-bar ${S_CLASS[m.status]} ${late ? "is-late" : ""} ${m.ongoing ? "is-ongoing" : ""}" style="left:${x(s)}%;width:${Math.max(0.6, x(e) - x(s))}%" title="${esc(tip)}">
+            <span class="g-fill" style="width:${p.pct}%"></span></div>` : `<span class="muted small g-nodate">no dates</span>`}${keyMarks}</div></div>`;
+      }).join("");
+    }).join("");
+    return `<header class="rep-head"><div><h2>Timeline</h2><div class="muted">${esc(scopeLine())} · ${fmtD(iso(a))} – ${fmtD(addDays(iso(b), -1))}</div></div></header>
+      <div class="g-legend">${STATUSES.map((st) => `<span><i class="sw ${S_CLASS[st]}"></i>${st}</span>`).join("")}<span><i class="sw sw-late"></i>Overdue (red outline)</span><span><i class="sw sw-fill"></i>Darker part = % done</span><span>◆ Key date</span></div>
+      <div class="gantt"><div class="g-row g-head"><div class="g-label"></div><div class="g-track">${monthCells}</div></div>
+        <div class="g-body">${rows}<div class="g-overlay"><div class="g-label"></div><div class="g-track">${todayLine}</div></div></div></div>
+      <p class="muted small rep-foot">Hover a bar for details; click a row to open the milestone.</p>`;
+  }
+
+  // ---------- 3. Workload & look-ahead ----------
+  function reportWorkload() {
+    const t0 = todayIso(), until = addDays(t0, state.horizon);
+    const open = repTasks().filter((t) => t.status !== "Complete");
+    const byPerson = new Map();
+    open.forEach((t) => { const m = milestoneById(t.milestone_id); const ppl = people(t.owner || (m && m.owner)); (ppl.length ? ppl : ["Unassigned"]).forEach((p) => {
+      const k = p.toLowerCase(); if (!byPerson.has(k)) byPerson.set(k, { name: p, tasks: [] }); byPerson.get(k).tasks.push(t); }); });
+    const rows = [...byPerson.values()].map((p) => {
+      const overdue = p.tasks.filter(needsAttention), inprog = p.tasks.filter((t) => t.status === "In progress" || t.status === "Pending"),
+        soon = p.tasks.filter((t) => !needsAttention(t) && ((t.end_date && t.end_date <= until) || (t.start_date && t.start_date >= t0 && t.start_date <= until)));
+      return { ...p, overdue, inprog, soon };
+    }).sort((a, b) => b.overdue.length - a.overdue.length || b.soon.length - a.soon.length || a.name.localeCompare(b.name));
+    const maxOpen = Math.max(1, ...rows.map((r) => r.tasks.length));
+    return `<header class="rep-head"><div><h2>Workload &amp; look-ahead</h2><div class="muted">${esc(scopeLine())} · open tasks per person, what's overdue, and what's due in the next ${state.horizon} days</div></div></header>
+      <div class="table-wrap"><table class="rep-table">
+        <thead><tr><th>Person</th><th>Open tasks</th><th>In progress</th><th>Overdue</th><th>Next ${state.horizon} days</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td><strong>${esc(r.name)}</strong></td>
+          <td><div class="mini-bar"><div class="bar load"><span style="width:${r.tasks.length / maxOpen * 100}%"></span></div>${r.tasks.length}</div></td>
+          <td class="num">${r.inprog.length || "—"}</td><td class="num ${r.overdue.length ? "late" : ""}">${r.overdue.length || "—"}</td><td class="num">${r.soon.length || "—"}</td></tr>`).join("")}</tbody>
+      </table></div>
+      <p class="muted small">Tasks shared by several people (e.g. "Srini/Vivek") count for each of them; tasks without an owner use their milestone's owner.</p>
+      ${rows.map((r) => (r.overdue.length || r.soon.length) ? `<section class="person"><h3>${esc(r.name)} <span class="count">${r.overdue.length + r.soon.length}</span></h3>
+        ${r.overdue.length ? `<div class="sub late">⚠ Overdue / needs attention</div><ul class="rep-list">${r.overdue.sort((a, b) => P_ORDER(a) - P_ORDER(b)).map((t) => taskLine(t, ` · ${prioTag(t)} <span class="late">${reviewDue(t) ? "review was due " + fmtD(t.review_date) : "was due " + fmtD(t.end_date)}</span>`)).join("")}</ul>` : ""}
+        ${r.soon.length ? `<div class="sub">→ Next ${state.horizon} days</div><ul class="rep-list">${r.soon.sort((a, b) => (a.end_date || a.start_date || "").localeCompare(b.end_date || b.start_date || "")).map((t) => taskLine(t, ` · ${prioTag(t)} ${t.start_date && t.start_date >= t0 ? "starts " + fmtD(t.start_date) + (t.end_date ? ", due " + fmtD(t.end_date) : "") : "due " + fmtD(t.end_date)} · ${t.status}`)).join("")}</ul>` : ""}
+      </section>` : "").join("") || `<p class="muted">Nothing overdue or coming up for this selection.</p>`}`;
   }
 
   function renderActivity() {
@@ -648,6 +809,9 @@
       if (a && await confirmBox("Remove file?", `“${esc(a.file_name)}” will be deleted for everyone.`, "Remove")) { if (await removeFiles([a])) { await loadAll(); toast("File removed"); } }
       return;
     }
+    const rt = e.target.closest("[data-report]");
+    if (rt) { state.report = rt.dataset.report; return renderReports(); }
+    if (e.target.closest("#rep-print")) return window.print();
     const ph = e.target.closest("[data-phase]");
     if (ph) { state.phase = state.phase === ph.dataset.phase ? "" : ph.dataset.phase; renderAll(); if (state.view === "activity") switchView("board"); return; }
     const el = e.target.closest("[data-tile],[data-open],[data-add-task],[data-edit-task],[data-del-task],[data-move],[data-ms-complete]");
@@ -679,6 +843,7 @@
   document.addEventListener("change", (e) => {
     const s = e.target;
     if (s.dataset && s.dataset.attach) { const files = s.files; if (files && files.length) uploadFiles(s.dataset.attach, files); s.value = ""; return; }
+    if (s.id === "rep-horizon") { state.horizon = Number(s.value); return renderReports(); }
     if (s.id === "task-sort-field") return setTaskSort(s.value, state.taskSortDir);
     if (s.dataset.taskStatus) setTaskStatus(s.dataset.taskStatus, s.value);
     if (s.dataset.msStatus) setMilestoneStatus(s.dataset.msStatus, s.value);
@@ -719,7 +884,8 @@
   function switchView(v) {
     state.view = v;
     $$("#view-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
-    ["board", "tasks", "list", "activity"].forEach((x) => $("#view-" + x).classList.toggle("hidden", x !== v));
+    document.body.classList.toggle("on-reports", v === "reports");
+    ["board", "tasks", "list", "activity", "reports"].forEach((x) => $("#view-" + x).classList.toggle("hidden", x !== v));
     if (v === "activity") { $("#view-activity").innerHTML = `<div class="empty">Loading…</div>`; loadActivity().then(renderActivity); }
     else renderAll();
   }

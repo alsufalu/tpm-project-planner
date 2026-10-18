@@ -253,3 +253,90 @@ tr.task-row td:first-child{padding-left:34px}
 
 /* text boxes, date boxes and drop-downs share one height so side-by-side fields line up exactly */
 .form-grid input[type=text], .form-grid input[type=email], .form-grid input[type=date], .form-grid input[type=number], .form-grid select { height: 42px; }
+
+/* ================= Reports ================= */
+.rep-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.rep-actions{display:flex;align-items:center;gap:10px}
+.rep-actions select{width:auto;padding:6px 8px;font-size:14px}
+.report{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px 28px 28px}
+.rep-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}
+.rep-head h2{margin:0 0 4px;font-size:22px}
+.report h3{font-size:15px;margin:24px 0 10px;display:flex;align-items:center;gap:8px}
+.report .count{font-size:12px;font-weight:700;background:#f2f4f7;color:#475467;border-radius:99px;padding:1px 8px}
+.small{font-size:12px}
+.health{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12.5px;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.h-green{color:#15803d;background:#e8f6ec}.h-amber{color:#b45309;background:#fff4e0}.h-red{color:#b42318;background:#fef3f2}.h-done{color:#1f3a5f;background:#e8eef7}
+.rep-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafbfc}
+.kpi .k{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.kpi .v{font-size:28px;font-weight:700;margin:2px 0 6px}
+.kpi .of{font-size:16px;color:var(--muted);font-weight:600}
+.rep-table td,.rep-table th{padding:9px 12px}
+.rep-table tr.clickable{cursor:pointer}.rep-table tr.clickable:hover{background:#f5f8ff}
+.mini-bar{display:flex;align-items:center;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.mini-bar .bar{width:110px;height:6px}
+.bar.load span{background:var(--navy-2)}
+.rep-cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.rep-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.rep-list li{display:flex;flex-direction:column;padding:7px 10px;border-radius:8px;cursor:pointer;border-left:3px solid transparent}
+.rep-list li:hover{background:#f5f8ff;border-left-color:var(--navy-2)}
+.rl-main{font-size:14px;font-weight:600}
+.rl-sub{font-size:12.5px;color:var(--muted)}
+.rl-sub .prio{font-size:10.5px;padding:0 6px}
+.ok{color:var(--cp);font-weight:700}
+.rep-foot{margin-top:22px;border-top:1px solid var(--line);padding-top:10px}
+.person{border-top:1px solid var(--line);margin-top:8px}
+.person .sub{font-size:12.5px;font-weight:700;margin:8px 0 2px;color:#475467}
+.person .sub.late{color:var(--late)}
+
+/* Gantt */
+.g-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:#475467;margin-bottom:10px}
+.g-legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:18px;height:10px;border-radius:3px;background:var(--cb);border:1px solid var(--c)}
+.sw-late{background:#fff;border:2px solid var(--late)}
+.sw-fill{background:linear-gradient(90deg,var(--ip) 55%,var(--ip-bg) 55%);border:1px solid var(--ip)}
+.gantt{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+.g-body{position:relative}
+.g-row{display:grid;grid-template-columns:260px minmax(640px,1fr);min-height:32px;border-bottom:1px solid #f0f2f5}
+.g-row[data-open]{cursor:pointer}.g-row[data-open]:hover{background:#f8faff}
+.g-label{padding:6px 12px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-right:1px solid var(--line);background:inherit;position:sticky;left:0;z-index:2;background:#fff;display:flex;justify-content:space-between;gap:8px}
+.g-row[data-open]:hover .g-label{background:#f8faff}
+.g-track{position:relative}
+.g-head{position:sticky;top:0;z-index:3;background:#fafbfc;min-height:30px}
+.g-head .g-label{background:#fafbfc}
+.g-month{position:absolute;top:0;bottom:0;border-left:1px solid #e4e7ec;font-size:11.5px;color:var(--muted);font-weight:600}
+.g-month span{position:absolute;left:5px;top:8px;white-space:nowrap}
+.g-line{position:absolute;top:0;bottom:0;border-left:1px solid #f0f2f5}
+.g-phase{background:#f7f9fc}.g-phase .g-label{background:#f7f9fc}
+.g-phasebar{position:absolute;top:13px;height:6px;border-radius:3px;background:#98a2b3}
+.g-bar{position:absolute;top:8px;height:16px;border-radius:4px;background:var(--cb);border:1px solid var(--c);overflow:hidden}
+.g-bar .g-fill{display:block;height:100%;background:var(--c);opacity:.85}
+.g-bar.is-late{border:2px solid var(--late);top:7px}
+.g-bar.is-ongoing{border-right-style:dashed;border-top-right-radius:0;border-bottom-right-radius:0}
+.g-key{position:absolute;top:6px;transform:translateX(-50%);color:#b45309;font-size:15px;line-height:1;text-shadow:0 0 0 #fff,0 0 3px #fff}
+.g-nodate{position:absolute;left:8px;top:8px}
+.g-overlay{position:absolute;inset:0;display:grid;grid-template-columns:260px minmax(640px,1fr);pointer-events:none}
+.g-overlay .g-label{visibility:hidden;border:none}
+.g-today{position:absolute;top:0;bottom:0;border-left:2px solid var(--late);z-index:1}
+.g-today span{position:absolute;top:-1px;left:3px;font-size:10.5px;font-weight:700;color:#fff;background:var(--late);border-radius:4px;padding:0 4px}
+
+@media (max-width:900px){.rep-kpis{grid-template-columns:repeat(2,1fr)}.rep-cols{grid-template-columns:1fr}.report{padding:16px}.g-row,.g-overlay{grid-template-columns:170px minmax(560px,1fr)}}
+
+/* Print: only the report */
+@media print{
+  body{background:#fff}
+  .topbar,.summary,.phases,.keydates,.toolbar,.no-print,.drawer,.scrim,.toast,.modal-wrap{display:none!important}
+  body:not(.on-reports) main > *:not(.view){display:none!important}
+  main{padding:0;max-width:none}
+  .report{border:none;box-shadow:none;padding:0}
+  .rep-list li{break-inside:avoid}
+  .gantt{overflow:visible;border:none}
+  .g-row,.g-overlay{grid-template-columns:200px 1fr}
+  .g-head{position:static}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+/* tab rows scroll sideways on narrow screens instead of widening the page */
+.tabs{max-width:100%;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;white-space:nowrap}

@@ -2,6 +2,12 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.6.0 — 2026-10-18
+- New Reports tab with the three reports project managers use most (each has Print / Save as PDF, and follows the phase / person filters):
+  - Project status report: overall health (On track / Watch / At risk), progress, key dates, status by phase, what was completed recently, what's coming up, and what's overdue.
+  - Timeline (Gantt): milestones as bars on a calendar grouped by phase, colored by status, with % done, overdue outlines, key-date diamonds and a Today line.
+  - Workload & look-ahead: open / in-progress / overdue / upcoming tasks per person, with each person's overdue and upcoming list.
+
 ## v1.5.2 — 2026-10-18
 - Edit forms: Phase lines up with Priority (shorter hint, and side-by-side boxes now align even when a label wraps).
 
