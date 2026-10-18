@@ -2,6 +2,11 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.6.1 — 2026-10-18
+- Milestone dates now follow their tasks automatically (start = earliest task start, end = latest task end), just like status. Fixes the timeline showing a milestone at its old dates after its tasks were moved. In the Edit form the milestone's dates show "· from its tasks" and are set by the tasks; milestones without dated tasks are still set by hand.
+- Data: 9 milestones whose dates no longer matched their tasks were brought in line (e.g. IT Planning now Oct 1, 2026 – Jul 30, 2027).
+- Tab rows scroll sideways on phones instead of widening the page.
+
 ## v1.6.0 — 2026-10-18
 - New Reports tab with the three reports project managers use most (each has Print / Save as PDF, and follows the phase / person filters):
   - Project status report: overall health (On track / Watch / At risk), progress, key dates, status by phase, what was completed recently, what's coming up, and what's overdue.

@@ -190,3 +190,6 @@ create policy pm_attachments_all on public.pm_attachments for all to authenticat
 alter table public.pm_milestones add column if not exists phase text,
   add column if not exists key_date boolean not null default false;
 alter table public.pm_tasks add column if not exists key_date boolean not null default false;
+
+-- v1.6.1: pm_task_rollup also sets milestone start/end from its tasks (earliest start, latest end;
+-- ongoing milestones keep no end). Trigger fires on every task insert/update/delete.

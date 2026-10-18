@@ -688,7 +688,7 @@
     Object.keys(d).forEach((k) => { d[k] = String(d[k]).trim() || null; });
     d.ongoing = !!form.ongoing?.checked;
     if (form.key_date) d.key_date = !!form.key_date.checked;
-    if (d.ongoing) d.end_date = null; else d.review_date = d.review_date || null;
+    if (d.ongoing && "end_date" in d) d.end_date = null; else d.review_date = d.review_date || null;
     if (d.status && d.status !== "Complete") d.completed_on = null;
     return d;
   }
@@ -696,7 +696,7 @@
   document.addEventListener("change", (e) => {
     if (e.target.name !== "ongoing") return;
     const end = e.target.form && e.target.form.end_date;
-    if (end) { end.disabled = e.target.checked; if (e.target.checked) end.value = ""; }
+    if (end && !end.closest("label").querySelector(".hint-inline")) { end.disabled = e.target.checked; if (e.target.checked) end.value = ""; }
   });
   const opt = (list, cur) => list.map((s) => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("");
 
@@ -710,8 +710,11 @@
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
         <label><span>Phase <span class="muted hint-inline">· groups milestones</span></span><input type="text" name="phase" list="phase-list" value="${esc(m.phase)}" placeholder="None"><datalist id="phase-list">${allPhases().map((p) => `<option value="${esc(p)}">`).join("")}</datalist></label>
         <label class="check full key-box"><input type="checkbox" name="key_date" ${m.key_date ? "checked" : ""}> ★ Key date — show this milestone in the Key dates strip</label>
-        <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
-        <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>
+        ${!isNew && tasksOf(m.id).some((t) => t.start_date || t.end_date)
+          ? `<label><span>Start date <span class="muted hint-inline">· from its tasks</span></span><input type="date" name="start_date" value="${esc(m.start_date)}" disabled></label>
+        <label><span>End date <span class="muted hint-inline">· from its tasks</span></span><input type="date" name="end_date" value="${esc(m.end_date)}" disabled></label>`
+          : `<label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
+        <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>`}
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${m.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
         <label><span>Review date <span class="muted hint-inline">· optional, for ongoing items</span></span><input type="date" name="review_date" value="${esc(m.review_date)}"></label>
         <label><span>Completed on <span class="muted hint-inline">· filled in automatically</span></span><input type="date" name="completed_on" value="${esc(m.completed_on)}"></label>
