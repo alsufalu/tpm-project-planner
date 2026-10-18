@@ -3,5 +3,8 @@
 window.PLANNER_CONFIG = {
   supabaseUrl: "https://bnjtoobxqfvosbvwnrie.supabase.co",
   supabaseKey: "sb_publishable_vrJCvon7BQioK2snDPB4Xw_-v7sr0PO",
-  projectName: "TPM Project Planner"
+  projectName: "TPM Project Planner",
+  // Bump this with every release (and the ?v= numbers in index.html). See CHANGELOG.md.
+  version: "1.1.0",
+  released: "2026-10-18"
 };

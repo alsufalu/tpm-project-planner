@@ -16,7 +16,12 @@
     session: null, milestones: [], tasks: [], members: [], activity: [],
     view: "board", q: "", owner: "", hideComplete: false, tileFilter: null,
     openId: null, authMode: "signin", recovering: false,
+    sortField: "plan", sortDir: "asc",
   };
+  try {
+    const saved = JSON.parse(localStorage.getItem("tpm-sort") || "null");
+    if (saved && ["plan", "start_date", "end_date"].includes(saved.f)) { state.sortField = saved.f; state.sortDir = saved.d === "desc" ? "desc" : "asc"; }
+  } catch (_) { /* storage unavailable */ }
 
   // ---------- helpers ----------
   const $ = (s, el = document) => el.querySelector(s);
@@ -54,6 +59,36 @@
     return { pct: Math.round(ts.reduce((a, t) => a + pctOfTask(t), 0) / ts.length), done: ts.filter((t) => t.status === "Complete").length, total: ts.length };
   }
   const milestoneById = (id) => state.milestones.find((m) => m.id === id);
+
+  // ---------- sorting ----------
+  // Plan order = the order in the original plan. Date sorts put items with no date at the bottom either way.
+  function planKey(x) {
+    if (x.milestone_id) { const m = milestoneById(x.milestone_id); return [(m ? m.position : 0), x.position]; }
+    return [x.position, 0];
+  }
+  function sortItems(list) {
+    const f = state.sortField, dir = state.sortDir === "desc" ? -1 : 1;
+    const byPlan = (a, b) => { const ka = planKey(a), kb = planKey(b); return ka[0] - kb[0] || ka[1] - kb[1]; };
+    return [...list].sort((a, b) => {
+      if (f === "plan") return byPlan(a, b) * dir;
+      const va = a[f], vb = b[f];
+      if (!va && !vb) return byPlan(a, b);
+      if (!va) return 1;
+      if (!vb) return -1;
+      return (va < vb ? -1 : va > vb ? 1 : 0) * dir || byPlan(a, b);
+    });
+  }
+  function renderSortControls() {
+    $("#sort-field").value = state.sortField;
+    const btn = $("#sort-dir");
+    if (state.sortField === "plan") btn.textContent = state.sortDir === "asc" ? "↑ First to last" : "↓ Last to first";
+    else btn.textContent = state.sortDir === "asc" ? "↑ Earliest first" : "↓ Latest first";
+  }
+  function setSort(field, dir) {
+    state.sortField = field; state.sortDir = dir;
+    try { localStorage.setItem("tpm-sort", JSON.stringify({ f: field, d: dir })); } catch (_) { /* ignore */ }
+    renderSortControls(); renderAll();
+  }
 
   // ---------- filtering ----------
   const textMatch = (x) => !state.q || [x.title, x.owner, x.comments, x.dependencies].join(" ").toLowerCase().includes(state.q);
@@ -187,18 +222,18 @@
   }
 
   function renderBoard() {
-    const items = state.milestones.filter(milestoneVisible);
+    const items = sortItems(state.milestones.filter(milestoneVisible));
     $("#view-board").innerHTML = columnsHTML(items, milestoneCard, "milestone");
   }
   function renderTaskBoard() {
-    const items = state.tasks.filter(taskVisible).sort((a, b) => (a.end_date || "9999").localeCompare(b.end_date || "9999"));
+    const items = sortItems(state.tasks.filter(taskVisible));
     $("#view-tasks").innerHTML = columnsHTML(items, taskCard, "task");
   }
 
   function renderList() {
     const rows = [];
-    state.milestones.forEach((m) => {
-      const ts = tasksOf(m.id).filter(taskVisible);
+    sortItems(state.milestones).forEach((m) => {
+      const ts = sortItems(tasksOf(m.id).filter(taskVisible));
       if (!milestoneVisible(m) && !ts.length) return;
       const p = progress(m);
       rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</td><td class="num">${p.pct}%</td></tr>`);
@@ -428,6 +463,13 @@
   $("#search").oninput = (e) => { state.q = e.target.value.trim().toLowerCase(); renderAll(); };
   $("#owner-filter").onchange = (e) => { state.owner = e.target.value; renderAll(); };
   $("#hide-complete").onchange = (e) => { state.hideComplete = e.target.checked; renderAll(); };
+  $$("[data-version]").forEach((el) => {
+    el.textContent = "v" + (cfg.version || "?");
+    el.title = `Version ${cfg.version}${cfg.released ? " · released " + cfg.released : ""}`;
+  });
+  $("#sort-field").onchange =(e) => setSort(e.target.value, state.sortDir);
+  $("#sort-dir").onclick = () => setSort(state.sortField, state.sortDir === "asc" ? "desc" : "asc");
+  renderSortControls();
   $("#add-milestone").onclick = () => milestoneForm(null);
   $("#edit-milestone").onclick = () => milestoneForm(milestoneById(state.openId));
   $("#delete-milestone").onclick = async () => {

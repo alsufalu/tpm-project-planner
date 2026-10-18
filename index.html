@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TPM Project Planner</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231f3a5f'/><path d='M8 10h16M8 16h11M8 22h7' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.1.0">
 </head>
 <body>
 
 <!-- ============ LOGIN ============ -->
 <section id="auth-view" class="auth hidden">
   <div class="auth-card">
-    <div class="brand big"><span class="logo"></span><div><strong>TPM Project Planner</strong><small>Restaurant build-out plan</small></div></div>
+    <div class="brand big"><span class="logo"></span><div><strong>TPM Project Planner <span class="ver" data-version></span></strong><small>Restaurant build-out plan</small></div></div>
     <div class="tabs auth-tabs">
       <button data-auth="signin" class="active">Sign in</button>
       <button data-auth="signup">Create account</button>
@@ -53,7 +53,7 @@
 <!-- ============ APP ============ -->
 <div id="app-view" class="hidden">
   <header class="topbar">
-    <div class="brand"><span class="logo"></span><div><strong>TPM Project Planner</strong><small id="overall-label">Loading…</small></div></div>
+    <div class="brand"><span class="logo"></span><div><strong>TPM Project Planner <span class="ver" data-version></span></strong><small id="overall-label">Loading…</small></div></div>
     <div class="overall"><div class="bar"><span id="overall-bar"></span></div></div>
     <div class="top-actions">
       <button class="btn ghost" id="team-btn" title="Who can use the planner">👥 Team</button>
@@ -75,6 +75,14 @@
       <div class="filters">
         <input type="search" id="search" placeholder="Search…">
         <select id="owner-filter"><option value="">Everyone</option></select>
+        <div class="sort-group" title="Sort order">
+          <select id="sort-field" aria-label="Sort by">
+            <option value="plan">Sort: plan order</option>
+            <option value="start_date">Sort: start date</option>
+            <option value="end_date">Sort: end date</option>
+          </select>
+          <button class="btn" id="sort-dir" type="button" aria-label="Sort direction">↑ Earliest first</button>
+        </div>
         <label class="check"><input type="checkbox" id="hide-complete"> Hide complete</label>
         <button class="btn primary" id="add-milestone">＋ New milestone</button>
       </div>
@@ -111,7 +119,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=1.1.0"></script>
+<script src="app.js?v=1.1.0"></script>
 </body>
 </html>

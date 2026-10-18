@@ -10,6 +10,10 @@ A shared, online version of the TPM restaurant build-out project plan.
 - Summary tiles at the top (click one to filter), search, a filter by person, and "Hide complete".
 - Changes show up for everyone automatically, with no refresh needed.
 
+## Versions
+
+The current version is shown next to the title (for example **v1.1.0**). See [CHANGELOG.md](CHANGELOG.md) for what changed in each release. If you don't see the newest number after an update, refresh the page (Ctrl+F5).
+
 ## How sign-in works
 
 Only people on the **Team** list can see or edit the plan.

@@ -53,6 +53,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid #b2ccff;border-color:#
 .brand strong{display:block;font-size:16px}
 .brand small{display:block;color:var(--muted);font-size:12px}
 .brand.big strong{font-size:19px}
+.ver{display:inline-block;vertical-align:middle;margin-left:4px;font-size:11px;font-weight:700;color:var(--navy-2);background:#eaf1ff;border-radius:99px;padding:1px 7px;cursor:default}
 .logo{width:34px;height:34px;border-radius:9px;background:var(--navy);flex:none;position:relative}
 .logo::before{content:"";position:absolute;left:8px;right:8px;top:10px;height:3px;border-radius:2px;background:#fff;box-shadow:0 6px 0 -0px #fff,0 12px 0 0 #fff;width:18px}
 .topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:10px 24px}
@@ -82,6 +83,10 @@ main{padding:20px 24px 60px;max-width:1500px;margin:0 auto}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .filters input[type=search]{width:200px}
 .filters select{width:auto}
+.sort-group{display:inline-flex;gap:0}
+.sort-group select{border-top-right-radius:0;border-bottom-right-radius:0;width:auto}
+.sort-group .btn{border-top-left-radius:0;border-bottom-left-radius:0;border-left:none;border-color:#d0d5dd;font-weight:500}
+.sort-group .btn:disabled{color:#98a2b3;cursor:default;background:#f9fafb}
 .check{flex-direction:row;align-items:center;gap:6px;font-weight:500;font-size:14px;color:#344054}
 
 /* ---------- status pill ---------- */
@@ -126,7 +131,7 @@ tr.ms-row{background:#f8fafc;cursor:pointer}
 tr.ms-row td{font-weight:700}
 tr.ms-row:hover{background:#eef4ff}
 tr.task-row td:first-child{padding-left:34px}
-.num{color:var(--muted);font-variant-numeric:tabular-nums}
+.num{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* ---------- activity ---------- */
 .activity{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);max-width:900px}
