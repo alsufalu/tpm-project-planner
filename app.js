@@ -15,7 +15,7 @@
   const state = {
     session: null, milestones: [], tasks: [], members: [], activity: [], attachments: [],
     view: "board", q: "", owner: "", phase: "", hideComplete: false, tileFilter: null,
-    openId: null, authMode: "signin", recovering: false,
+    openId: null, authMode: "join", recovering: false, joining: false,
     sortField: "plan", sortDir: "asc",          // main views
     taskSortField: "plan", taskSortDir: "asc",  // task list inside a milestone
   };
@@ -67,7 +67,10 @@
     return new Date(iso).toLocaleDateString();
   };
   const people = (owner) => (owner || "").split(/\s*(?:\/|,|&|\band\b)\s*/i).map((p) => p.trim()).filter(Boolean);
-  const nameFor = (email) => { const m = state.members.find((x) => x.email === email); return (m && m.display_name) || (email ? email.split("@")[0] : "someone"); };
+  // Who the signed-in person is in pm_members: their email, or "code:<id>" for people who joined with the team code.
+  const myKey = () => { const u = state.session?.user; return u ? (u.email ? u.email.toLowerCase() : "code:" + u.id) : ""; };
+  const isCodeKey = (k) => (k || "").startsWith("code:");
+  const nameFor = (email) => { const m = state.members.find((x) => x.email === email); return (m && m.display_name) || (isCodeKey(email) ? "Partner" : email && !email.includes("@") ? email : email ? email.split("@")[0] : "someone"); };
   const pill = (status) => `<span class="pill ${S_CLASS[status]}">${esc(status)}</span>`;
   const statusSelect = (status, attrs) =>
     `<select class="status-select ${S_CLASS[status]}" ${attrs}>${STATUSES.map((s) => `<option ${s === status ? "selected" : ""}>${s}</option>`).join("")}</select>`;
@@ -352,7 +355,7 @@
     const pct = all.length ? Math.round(all.reduce((a, t) => a + pctOfTask(t), 0) / all.length) : 0;
     $("#overall-label").textContent = `${pct}% overall · ${done} of ${all.length} tasks complete`;
     $("#overall-bar").style.width = pct + "%";
-    $("#who").textContent = state.session?.user?.email || "";
+    $("#who").textContent = state.session?.user?.email || nameFor(myKey());
   }
 
   function renderSummary() {
@@ -485,7 +488,7 @@
     const daysToOpen = opening && opening.start_date ? daysBetween(t0, opening.start_date) : null;
     return `
       <header class="rep-head">
-        <div><h2>Project status report</h2><div class="muted">${esc(cfg.projectName)} · ${esc(scopeLine())} · ${today().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · prepared by ${esc(nameFor(state.session?.user?.email))}</div></div>
+        <div><h2>Project status report</h2><div class="muted">${esc(cfg.projectName)} · ${esc(scopeLine())} · ${today().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · prepared by ${esc(nameFor(myKey()))}</div></div>
         ${healthBadge(h)}
       </header>
       <section class="rep-kpis">
@@ -775,17 +778,30 @@
     };
   }
 
-  function teamModal() {
-    const me = state.session.user.email.toLowerCase();
+  async function teamModal() {
+    const me = myKey(); const canChangeCode = !!state.session.user.email;
+    const { data: code } = await sb.rpc("pm_get_join_code");
     modal("Team members", `
-      <p class="muted" style="margin-top:0">Anyone listed here can sign in and view or change the plan. To invite someone, add their email and ask them to open the planner and choose <em>Create account</em> with that same email.</p>
-      <div>${state.members.map((m) => `<div class="member"><div><strong>${esc(m.display_name || m.email.split("@")[0])}</strong><br><span class="muted">${esc(m.email)}</span></div>${m.email === me ? `<span class="muted">you</span>` : `<button class="btn danger-ghost small" data-rm="${esc(m.email)}">Remove</button>`}</div>`).join("")}</div>
+      <div class="code-box">
+        <div><div class="k">Team code</div><div class="code">${esc(code || "—")}</div>
+          <div class="muted small">Send partners the link and this code. They enter their name + the code once per device — no account needed.</div></div>
+        ${canChangeCode ? `<form id="code-form" class="code-change"><input type="text" name="code" placeholder="New code" minlength="4" required autocomplete="off"><button class="btn small">Change code</button></form>` : ""}
+      </div>
+      <p class="muted" style="margin:14px 0 4px">Everyone below can view and change the plan. Removing someone signs them out of the planner.</p>
+      <div>${state.members.map((m) => `<div class="member"><div><strong>${esc(m.display_name || (isCodeKey(m.email) ? "Partner" : m.email.split("@")[0]))}</strong><br><span class="muted">${isCodeKey(m.email) ? "joined with the team code" : esc(m.email)}</span></div>${m.email === me ? `<span class="muted">you</span>` : `<button class="btn danger-ghost small" data-rm="${esc(m.email)}">Remove</button>`}</div>`).join("")}</div>
+      <p class="muted small" style="margin-top:14px">Prefer an email login for someone? Add their email below and have them use <em>Create account</em> with it.</p>
       <form id="addmember" class="form-grid" style="margin-top:16px">
         <label>Email<input type="email" name="email" required></label>
         <label>Name<input type="text" name="display_name" placeholder="optional"></label>
         <div class="modal-actions full"><button type="button" class="btn" id="team-close">Close</button><button class="btn primary">Add member</button></div>
       </form>`);
     $("#team-close").onclick = closeModal;
+    if ($("#code-form")) $("#code-form").onsubmit = async (e) => {
+      e.preventDefault(); const v = e.target.code.value.trim();
+      const { data: ok, error } = await sb.rpc("pm_set_join_code", { p_code: v });
+      if (error || !ok) return toast("Couldn't change the code" + (error ? ": " + error.message : " (at least 4 characters)"), true);
+      toast("Team code changed — share the new one with partners"); teamModal();
+    };
     $$("[data-rm]").forEach((b) => b.onclick = async () => {
       const { error } = await sb.from("pm_members").delete().eq("email", b.dataset.rm);
       if (error) return toast(error.message, true);
@@ -935,6 +951,8 @@
   $$("[data-auth]").forEach((b) => b.onclick = () => {
     state.authMode = b.dataset.auth;
     $$("[data-auth]").forEach((x) => x.classList.toggle("active", x === b));
+    $("#join-form").classList.toggle("hidden", state.authMode !== "join");
+    $("#auth-form").classList.toggle("hidden", state.authMode === "join");
     $("#auth-submit").textContent = state.authMode === "signin" ? "Sign in" : "Create account";
     $("#auth-form [name=password]").autocomplete = state.authMode === "signin" ? "current-password" : "new-password";
     $("#forgot").classList.toggle("hidden", state.authMode !== "signin");
@@ -966,17 +984,57 @@
     if (error) { $("#reset-msg").textContent = error.message; $("#reset-msg").className = "msg err"; return; }
     state.recovering = false; toast("Password updated"); route();
   };
-  const signOut = async () => { await sb.auth.signOut(); };
+  const signOut = async () => {
+    if (state.session?.user?.is_anonymous && !(await confirmBox("Sign out?", "You joined with the team code, so you'll need the code again to get back in on this device.", "Sign out"))) return;
+    await sb.auth.signOut();
+  };
   $("#signout").onclick = signOut; $("#nomember-signout").onclick = signOut;
   $("#recheck").onclick = () => route();
+
+  // ----- join with the team code (no account) -----
+  const joinMsg = (t, cls = "") => { const m = $("#join-msg"); m.textContent = t; m.className = "msg " + cls; };
+  $("#join-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = e.target.name.value.trim(), code = e.target.code.value.trim();
+    if (!name || !code) return;
+    joinMsg("Checking…"); $("#join-submit").disabled = true; state.joining = true;
+    try {
+      if (!state.session) {
+        const { error } = await sb.auth.signInAnonymously();
+        if (error) { joinMsg(/anonymous/i.test(error.message) ? "Team-code access isn't switched on yet — please ask Alberto." : error.message, "err"); return; }
+      }
+      const { data: ok, error } = await sb.rpc("pm_join", { p_code: code, p_name: name });
+      if (error || !ok) {
+        if (state.session?.user?.is_anonymous) await sb.auth.signOut();
+        joinMsg(error ? error.message : "That code isn't right — check the message you were sent.", "err"); return;
+      }
+      joinMsg("");
+    } finally { state.joining = false; $("#join-submit").disabled = false; }
+    route();
+  };
+  $("#nomember-code").onsubmit = async (e) => {
+    e.preventDefault();
+    const { data: ok, error } = await sb.rpc("pm_join", { p_code: e.target.code.value.trim(), p_name: null });
+    const m = $("#nomember-msg");
+    if (error || !ok) { m.textContent = "That code isn't right."; m.className = "msg err"; return; }
+    route();
+  };
 
   async function route() {
     const session = state.session;
     if (state.recovering) return show("reset-view");
+    if (state.joining) return;
     if (!session) { show("auth-view"); return; }
-    const email = session.user.email.toLowerCase();
-    const { data, error } = await sb.from("pm_members").select("email").eq("email", email).maybeSingle();
-    if (error || !data) { $("#nomember-email").textContent = email; show("nomember-view"); return; }
+    const { data: isMember, error } = await sb.rpc("pm_is_member");
+    if (error || !isMember) {
+      if (session.user.is_anonymous) {
+        // a code session that isn't (or is no longer) on the team: back to the code screen, keeping any message already shown
+        await sb.auth.signOut(); show("auth-view");
+        if (!$("#join-msg").textContent.trim()) joinMsg("Please enter the team code to continue.", "err");
+        return;
+      }
+      $("#nomember-email").textContent = session.user.email; show("nomember-view"); return;
+    }
     show("app-view");
     await loadAll(); subscribe();
   }

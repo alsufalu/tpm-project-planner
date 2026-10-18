@@ -193,3 +193,8 @@ alter table public.pm_tasks add column if not exists key_date boolean not null d
 
 -- v1.6.1: pm_task_rollup also sets milestone start/end from its tasks (earliest start, latest end;
 -- ongoing milestones keep no end). Trigger fires on every task insert/update/delete.
+
+-- v1.7.0: team-code access (requires "Allow anonymous sign-ins" in Supabase Auth settings)
+-- pm_settings(key, value) holds join_code; pm_member_key() = email or 'code:<auth uid>';
+-- pm_join(code, name) adds the caller to pm_members; pm_get_join_code(); pm_set_join_code(code) (email members only);
+-- pm_actor() = email or the code user's name, used for updated_by / activity / uploaded_by.

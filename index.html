@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TPM Project Planner</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231f3a5f'/><path d='M8 10h16M8 16h11M8 22h7' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
-<link rel="stylesheet" href="styles.css?v=1.6.1">
+<link rel="stylesheet" href="styles.css?v=1.7.0">
 </head>
 <body>
 
@@ -14,10 +14,18 @@
   <div class="auth-card">
     <div class="brand big"><span class="logo"></span><div><strong>TPM Project Planner <span class="ver" data-version></span></strong><small>Restaurant build-out plan</small></div></div>
     <div class="tabs auth-tabs">
-      <button data-auth="signin" class="active">Sign in</button>
+      <button data-auth="join" class="active">Team code</button>
+      <button data-auth="signin">Sign in</button>
       <button data-auth="signup">Create account</button>
     </div>
-    <form id="auth-form" autocomplete="on">
+    <form id="join-form" autocomplete="on">
+      <p class="muted join-intro">Enter your name and the team code you were sent. You only need to do this once on each phone or computer.</p>
+      <label>Your name<input type="text" name="name" required autocomplete="name" placeholder="e.g. Vivek"></label>
+      <label>Team code<input type="text" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <button class="btn primary wide" type="submit" id="join-submit">Join the planner</button>
+      <p class="msg" id="join-msg"></p>
+    </form>
+    <form id="auth-form" autocomplete="on" class="hidden">
       <label>Email<input type="email" name="email" required autocomplete="email"></label>
       <label>Password<input type="password" name="password" required minlength="6" autocomplete="current-password"></label>
       <button class="btn primary wide" type="submit" id="auth-submit">Sign in</button>
@@ -34,6 +42,11 @@
     <p>You're signed in as <strong id="nomember-email"></strong>, but this email hasn't been added to the team yet.</p>
     <p class="muted">Ask any team member to open <em>Team</em> in the planner and add your email, then click below.</p>
     <button class="btn primary wide" id="recheck">I've been added — try again</button>
+    <form id="nomember-code" class="inline-code">
+      <label>…or enter the team code<input type="text" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+      <button class="btn" type="submit">Join</button>
+    </form>
+    <p class="msg" id="nomember-msg"></p>
     <button class="link" id="nomember-signout">Sign out</button>
   </div>
 </section>
@@ -125,7 +138,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=1.6.1"></script>
-<script src="app.js?v=1.6.1"></script>
+<script src="config.js?v=1.7.0"></script>
+<script src="app.js?v=1.7.0"></script>
 </body>
 </html>

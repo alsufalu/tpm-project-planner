@@ -2,6 +2,11 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.7.0 — 2026-10-18
+- Team code access: partners open the link, choose "Team code", type their name and the code once per phone/computer — no account, email or password. Their changes show under their name. The planner remembers the device (tip: on iPhone use Share → Add to Home Screen).
+- Team screen shows the current team code; members who sign in with an email can change it. Code users appear as "joined with the team code" and can be removed.
+- Someone signed in with an email that isn't on the team can also enter the code on the "Almost there" screen.
+
 ## v1.6.1 — 2026-10-18
 - Milestone dates now follow their tasks automatically (start = earliest task start, end = latest task end), just like status. Fixes the timeline showing a milestone at its old dates after its tasks were moved. In the Edit form the milestone's dates show "· from its tasks" and are set by the tasks; milestones without dated tasks are still set by hand.
 - Data: 9 milestones whose dates no longer matched their tasks were brought in line (e.g. IT Planning now Oct 1, 2026 – Jul 30, 2027).
