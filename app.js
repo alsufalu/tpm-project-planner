@@ -14,7 +14,7 @@
 
   const state = {
     session: null, milestones: [], tasks: [], members: [], activity: [], attachments: [],
-    view: "board", q: "", owner: "", hideComplete: false, tileFilter: null,
+    view: "board", q: "", owner: "", phase: "", hideComplete: false, tileFilter: null,
     openId: null, authMode: "signin", recovering: false,
     sortField: "plan", sortDir: "asc",          // main views
     taskSortField: "plan", taskSortDir: "asc",  // task list inside a milestone
@@ -205,9 +205,19 @@
   // ---------- filtering ----------
   const textMatch = (x) => !state.q || [x.title, x.owner, x.comments, x.dependencies].join(" ").toLowerCase().includes(state.q);
   const ownerMatch = (owner) => !state.owner || people(owner).some((p) => p.toLowerCase() === state.owner.toLowerCase());
+  // Phases group milestones (e.g. "Interior Construction"); "__none" = milestones without a phase.
+  const NO_PHASE = "__none";
+  const phaseOf = (m) => (m && m.phase && m.phase.trim()) || "";
+  const phaseMatch = (m) => !state.phase || (state.phase === NO_PHASE ? !phaseOf(m) : phaseOf(m) === state.phase);
+  const allPhases = () => [...new Set(state.milestones.map(phaseOf).filter(Boolean))].sort((a, b) => {
+    // order phases by their earliest milestone in plan order
+    const first = (ph) => Math.min(...state.milestones.filter((m) => phaseOf(m) === ph).map((m) => m.position));
+    return first(a) - first(b);
+  });
   const tileMatch = (x) => !state.tileFilter || (state.tileFilter === "late" ? needsAttention(x) : x.status === state.tileFilter);
   function milestoneVisible(m) {
     const ts = tasksOf(m.id);
+    if (!phaseMatch(m)) return false;
     if (state.hideComplete && m.status === "Complete") return false;
     if (!tileMatch(m)) return false;
     const t1 = textMatch(m) || ts.some(textMatch);
@@ -216,6 +226,7 @@
   }
   function taskVisible(t) {
     const m = milestoneById(t.milestone_id);
+    if (!phaseMatch(m)) return false;
     if (state.hideComplete && t.status === "Complete") return false;
     if (!tileMatch(t)) return false;
     return (textMatch(t) || (m && textMatch(m))) && ownerMatch(t.owner || (m && m.owner));
@@ -271,11 +282,68 @@
 
   // ---------- rendering ----------
   function renderAll() {
-    renderHeader(); renderSummary(); renderOwnerFilter();
+    renderHeader(); renderSummary(); renderKeyDates(); renderPhases(); renderOwnerFilter(); renderPhaseFilter();
     if (state.view === "board") renderBoard();
     if (state.view === "tasks") renderTaskBoard();
     if (state.view === "list") renderList();
     if (state.openId) renderDrawer();
+  }
+
+  // ----- phases strip: one card per phase with its overall progress -----
+  function phaseStats(list) {
+    const ts = list.flatMap((m) => tasksOf(m.id));
+    const pct = ts.length ? Math.round(ts.reduce((a, t) => a + pctOfTask(t), 0) / ts.length) : Math.round(list.filter((m) => m.status === "Complete").length / Math.max(1, list.length) * 100);
+    const starts = list.map((m) => m.start_date).filter(Boolean).sort(), ends = list.map((m) => m.end_date).filter(Boolean).sort();
+    return { pct, done: ts.filter((t) => t.status === "Complete").length, total: ts.length, start: starts[0], end: ends[ends.length - 1],
+      late: list.some(needsAttention) || ts.some(needsAttention), active: list.filter((m) => m.status === "In progress").length };
+  }
+  function renderPhases() {
+    const phases = allPhases(); const el = $("#phases");
+    if (!phases.length) { el.classList.add("hidden"); return; }
+    el.classList.remove("hidden");
+    const groups = phases.map((ph) => ({ key: ph, name: ph, list: state.milestones.filter((m) => phaseOf(m) === ph) }));
+    const rest = state.milestones.filter((m) => !phaseOf(m));
+    if (rest.length) groups.push({ key: NO_PHASE, name: "Other (no phase)", list: rest });
+    el.innerHTML = groups.map((g) => { const st = phaseStats(g.list); return `
+      <button class="phase-card ${state.phase === g.key ? "on" : ""} ${g.key === NO_PHASE ? "other" : ""}" data-phase="${esc(g.key)}" title="Click to show only this phase">
+        <div class="ph-top"><span class="ph-name">${esc(g.name)}</span><span class="ph-pct">${st.pct}%</span></div>
+        <div class="bar"><span style="width:${st.pct}%"></span></div>
+        <div class="ph-meta">${g.list.length} milestone${g.list.length === 1 ? "" : "s"} · ${st.done}/${st.total} tasks done${st.start || st.end ? ` · ${fmtShort(st.start)} – ${fmtShort(st.end)}` : ""}${st.late ? ` · <span class="late">needs attention</span>` : ""}</div>
+      </button>`; }).join("");
+  }
+  function renderPhaseFilter() {
+    const sel = $("#phase-filter"); const phases = allPhases();
+    sel.classList.toggle("hidden", !phases.length);
+    sel.innerHTML = `<option value="">All phases</option>` + phases.map((p) => `<option ${p === state.phase ? "selected" : ""}>${esc(p)}</option>`).join("") +
+      (state.milestones.some((m) => !phaseOf(m)) ? `<option value="${NO_PHASE}" ${state.phase === NO_PHASE ? "selected" : ""}>Other (no phase)</option>` : "");
+  }
+  const fmtShort = (s) => { const d = parseD(s); return d ? d.toLocaleDateString(undefined, { month: "short", year: "numeric" }) : "—"; };
+  // ----- key dates strip: checkpoints flagged with "Key date" -----
+  function keyRange(x) {
+    if (x.ongoing) return x.start_date ? "from " + fmtD(x.start_date) : "ongoing";
+    if (x.start_date && x.end_date && x.start_date !== x.end_date) {
+      const a = parseD(x.start_date), b = parseD(x.end_date);
+      return a.getFullYear() === b.getFullYear()
+        ? `${a.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${b.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+        : `${fmtD(x.start_date)} – ${fmtD(x.end_date)}`;
+    }
+    return fmtD(x.end_date || x.start_date);
+  }
+  function renderKeyDates() {
+    const items = [...state.milestones.filter((m) => m.key_date).map((m) => ({ x: m, mid: m.id })),
+                   ...state.tasks.filter((t) => t.key_date).map((t) => ({ x: t, mid: t.milestone_id, tid: t.id }))]
+      .filter((k) => phaseMatch(milestoneById(k.mid)))
+      .sort((a, b) => (a.x.start_date || a.x.end_date || "9999").localeCompare(b.x.start_date || b.x.end_date || "9999"));
+    const el = $("#keydates");
+    if (!items.length) { el.classList.add("hidden"); return; }
+    el.classList.remove("hidden");
+    el.innerHTML = `<span class="kd-label">★ Key dates</span>` + items.map(({ x, mid, tid }) => {
+      const target = x.end_date || x.start_date; const done = x.status === "Complete";
+      const days = target ? daysBetween(today().toISOString().slice(0, 10), target) : null;
+      const when = done ? "✓ done" : days == null ? "" : days > 0 ? `in ${days} day${days === 1 ? "" : "s"}` : days === 0 ? "today" : `${-days} days ago`;
+      return `<button class="kd ${done ? "done" : isLate(x) ? "late-kd" : ""}" data-open="${mid}" ${tid ? `data-focus="${tid}"` : ""} title="${esc(x.title)}">
+        <span class="kd-title">${esc(x.title.split("\n")[0])}</span><span class="kd-date">${keyRange(x)}</span>${when ? `<span class="kd-when">${when}</span>` : ""}</button>`;
+    }).join("");
   }
 
   function renderHeader() {
@@ -287,7 +355,8 @@
   }
 
   function renderSummary() {
-    const ms = state.milestones, ts = state.tasks;
+    // When a phase is selected, the tiles count only that phase.
+    const ms = state.milestones.filter(phaseMatch), ts = state.tasks.filter((t) => phaseMatch(milestoneById(t.milestone_id)));
     const tiles = STATUSES.map((s) => ({ key: s, cls: S_CLASS[s], n: ms.filter((m) => m.status === s).length, sub: `${ts.filter((t) => t.status === s).length} tasks`, label: s === "Not started" ? "Not started yet" : s }));
     const rv = [...ms, ...ts].filter(reviewDue).length;
     tiles.push({ key: "late", cls: "s-late", n: ms.filter(needsAttention).length, sub: `${ts.filter(isLate).length} tasks past due${rv ? ` · ${rv} review${rv > 1 ? "s" : ""} due` : ""}`, label: "Overdue" });
@@ -321,7 +390,7 @@
     const p = progress(m); const ts = tasksOf(m.id);
     const chips = STATUSES.map((s) => { const n = ts.filter((t) => t.status === s).length; return n ? `<span class="chip ${S_CLASS[s]}" title="${s}">${n} ${s.toLowerCase()}</span>` : ""; }).join("");
     return `<div class="card ${S_CLASS[m.status]}" draggable="true" data-open="${m.id}" data-drag="${m.id}">
-      ${prioTag(m) ? `<div class="tags">${prioTag(m)}</div>` : ""}<h4>${esc(m.title)}</h4>
+      ${prioTag(m) || (phaseOf(m) && !state.phase) || m.key_date ? `<div class="tags">${m.key_date ? `<span class="star" title="Key date">★</span>` : ""}${prioTag(m)}${phaseOf(m) && !state.phase ? `<span class="phase-tag">${esc(phaseOf(m))}</span>` : ""}</div>` : ""}<h4>${esc(m.title)}</h4>
       <div class="meta"><span>👤 ${esc(m.owner || "Unassigned")}</span>${dateLine(m)}</div>
       <div class="prog"><div class="bar"><span style="width:${p.pct}%"></span></div><span>${p.total ? `${p.done}/${p.total} tasks` : "No tasks"}</span></div>
       ${chips || filesOfMilestone(m.id).length ? `<div class="chips">${chips}${filesOfMilestone(m.id).length ? `<span class="chip clip" title="Attached files">📎 ${filesOfMilestone(m.id).length}</span>` : ""}</div>` : ""}
@@ -331,7 +400,7 @@
     const m = milestoneById(t.milestone_id);
     return `<div class="card ${S_CLASS[t.status]}" draggable="true" data-open="${t.milestone_id}" data-focus="${t.id}" data-drag="${t.id}">
       <div class="parent">${esc(m ? m.title : "")}</div>
-      ${prioTag(t) ? `<div class="tags">${prioTag(t)}</div>` : ""}<h4>${esc(t.title)}</h4>
+      ${prioTag(t) || t.key_date ? `<div class="tags">${t.key_date ? `<span class="star" title="Key date">★ Key date</span>` : ""}${prioTag(t)}</div>` : ""}<h4>${esc(t.title)}</h4>
       <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span>${dateLine(t)}${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}${filesOf(t.id).length ? `<span title="Attached files">📎 ${filesOf(t.id).length}</span>` : ""}</div>
     </div>`;
   }
@@ -351,7 +420,7 @@
       const ts = sortItems(tasksOf(m.id).filter(taskVisible));
       if (!milestoneVisible(m) && !ts.length) return;
       const p = progress(m);
-      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${prioTag(m, true)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${m.ongoing ? "Ongoing" : fmtD(m.end_date)}</td><td class="num">${m.status === "Complete" && m.completed_on ? "✓ " + fmtD(m.completed_on) : p.pct + "%"}</td></tr>`);
+      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}${phaseOf(m) && !state.phase ? ` <span class="phase-tag">${esc(phaseOf(m))}</span>` : ""}</td><td>${prioTag(m, true)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${m.ongoing ? "Ongoing" : fmtD(m.end_date)}</td><td class="num">${m.status === "Complete" && m.completed_on ? "✓ " + fmtD(m.completed_on) : p.pct + "%"}</td></tr>`);
       ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${prioTag(t, true)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${t.ongoing ? "Ongoing" : fmtD(t.end_date)}</td><td class="num">${t.status === "Complete" && t.completed_on ? "✓ " + fmtD(t.completed_on) : pctOfTask(t) + "%"}</td></tr>`));
     });
     $("#view-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Milestone / task</th><th>Priority</th><th>Owner</th><th>Status</th><th>Start</th><th>End</th><th>Done</th></tr></thead><tbody>${rows.join("") || `<tr><td colspan="7" class="empty">Nothing matches your filters</td></tr>`}</tbody></table></div>`;
@@ -384,7 +453,7 @@
     const ts = sortItems(tasksOf(m.id), state.taskSortField, state.taskSortDir); const p = progress(m);
     const canMove = state.taskSortField === "plan" && state.taskSortDir === "asc";
     $("#drawer-body").innerHTML = `
-      <div class="drawer-tags">${ts.length ? `${pill(m.status)} <span class="muted auto-note" title="A milestone's status follows its tasks">set by its tasks</span>` : statusSelect(m.status, `data-ms-status="${m.id}"`)} ${prioTag(m, true)}${m.ongoing ? ` <span class="ongoing">🔁 Ongoing</span>` : ""}</div>
+      <div class="drawer-tags">${ts.length ? `${pill(m.status)} <span class="muted auto-note" title="A milestone's status follows its tasks">set by its tasks</span>` : statusSelect(m.status, `data-ms-status="${m.id}"`)} ${prioTag(m, true)}${m.ongoing ? ` <span class="ongoing">🔁 Ongoing</span>` : ""}${phaseOf(m) ? ` <span class="phase-tag">${esc(phaseOf(m))}</span>` : ""}${m.key_date ? ` <span class="star">★ Key date</span>` : ""}</div>
       <h2>${esc(m.title)}</h2>
       <div class="facts">
         <div class="fact"><div class="k">Owner</div><div class="v">${esc(m.owner || "Unassigned")}</div></div>
@@ -415,7 +484,7 @@
       ${ts.map((t, i) => `
         <div class="task ${S_CLASS[t.status]} ${t.status === "Complete" ? "done" : ""}" data-task="${t.id}">
           <div>
-            <h4>${esc(t.title)}</h4>
+            <h4>${t.key_date ? `<span class="star" title="Key date">★</span> ` : ""}${esc(t.title)}</h4>
             <div class="meta">${prioTag(t)}<span>👤 ${esc(t.owner || "Unassigned")}</span>${dateLine(t, true)}</div>
           </div>
           <div class="right">
@@ -457,6 +526,7 @@
     const d = Object.fromEntries(new FormData(form));
     Object.keys(d).forEach((k) => { d[k] = String(d[k]).trim() || null; });
     d.ongoing = !!form.ongoing?.checked;
+    if (form.key_date) d.key_date = !!form.key_date.checked;
     if (d.ongoing) d.end_date = null; else d.review_date = d.review_date || null;
     if (d.status && d.status !== "Complete") d.completed_on = null;
     return d;
@@ -477,7 +547,8 @@
         <label>Owner<input type="text" name="owner" value="${esc(m.owner)}" placeholder="e.g. Vivek/Alberto"></label>
         <label><span>Status${!isNew && tasksOf(m.id).length ? ` <span class="muted hint-inline">· set by its tasks</span>` : ""}</span><select name="status" ${!isNew && tasksOf(m.id).length ? "disabled" : ""}>${opt(STATUSES, m.status)}</select></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
-        <div></div>
+        <label><span>Phase <span class="muted hint-inline">· groups milestones, e.g. Interior Construction</span></span><input type="text" name="phase" list="phase-list" value="${esc(m.phase)}" placeholder="None"><datalist id="phase-list">${allPhases().map((p) => `<option value="${esc(p)}">`).join("")}</datalist></label>
+        <label class="check full key-box"><input type="checkbox" name="key_date" ${m.key_date ? "checked" : ""}> ★ Key date — show this milestone in the Key dates strip</label>
         <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${m.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
@@ -511,6 +582,7 @@
         <label>Status<select name="status">${opt(STATUSES, t.status)}</select></label>
         <label>Start date<input type="date" name="start_date" value="${esc(t.start_date)}"></label>
         <label>End date<input type="date" name="end_date" value="${esc(t.end_date)}" ${t.ongoing ? "disabled" : ""}></label>
+        <label class="check full key-box"><input type="checkbox" name="key_date" ${t.key_date ? "checked" : ""}> ★ Key date — a checkpoint to show in the Key dates strip (e.g. handover, inspection, opening)</label>
         <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${t.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
         <label><span>Review date <span class="muted hint-inline">· optional, for ongoing items</span></span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
         <label><span>Completed on <span class="muted hint-inline">· filled in automatically</span></span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
@@ -576,6 +648,8 @@
       if (a && await confirmBox("Remove file?", `“${esc(a.file_name)}” will be deleted for everyone.`, "Remove")) { if (await removeFiles([a])) { await loadAll(); toast("File removed"); } }
       return;
     }
+    const ph = e.target.closest("[data-phase]");
+    if (ph) { state.phase = state.phase === ph.dataset.phase ? "" : ph.dataset.phase; renderAll(); if (state.view === "activity") switchView("board"); return; }
     const el = e.target.closest("[data-tile],[data-open],[data-add-task],[data-edit-task],[data-del-task],[data-move],[data-ms-complete]");
     if (!el || e.target.closest("select")) return;
     if (el.dataset.tile) { state.tileFilter = state.tileFilter === el.dataset.tile ? null : el.dataset.tile; renderAll(); if (state.view === "activity") switchView("board"); return; }
@@ -652,6 +726,7 @@
   $$("#view-tabs button").forEach((b) => b.onclick = () => switchView(b.dataset.view));
   $("#search").oninput = (e) => { state.q = e.target.value.trim().toLowerCase(); renderAll(); };
   $("#owner-filter").onchange = (e) => { state.owner = e.target.value; renderAll(); };
+  $("#phase-filter").onchange = (e) => { state.phase = e.target.value; renderAll(); };
   $("#hide-complete").onchange = (e) => { state.hideComplete = e.target.checked; renderAll(); };
   $$("[data-version]").forEach((el) => {
     el.textContent = "v" + (cfg.version || "?");

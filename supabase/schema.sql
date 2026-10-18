@@ -185,3 +185,8 @@ create policy pm_attachments_all on public.pm_attachments for all to authenticat
 
 -- v1.4.1: pm_touch keeps tasks' % done and status consistent (changed status wins; otherwise
 -- 100% -> Complete, 1-99% on a not-started task -> In progress). See migration pm_percent_status_precedence.
+
+-- v1.5.0: phases and key dates
+alter table public.pm_milestones add column if not exists phase text,
+  add column if not exists key_date boolean not null default false;
+alter table public.pm_tasks add column if not exists key_date boolean not null default false;

@@ -2,6 +2,11 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.5.0 — 2026-10-18
+- Phases: milestones can belong to a phase (e.g. "Interior Construction"). A row of phase cards shows each phase's overall progress, task count, date span and whether anything needs attention; click a card (or use the new phase menu) to show only that phase. Summary tiles follow the selected phase.
+- Key dates: tick "★ Key date" on a milestone or task to show it in a Key dates strip with a countdown (e.g. "in 201 days").
+- Data: 8 build-out milestones grouped under Interior Construction; landlord key handover, certificate of occupancy and grand opening marked as key dates.
+
 ## v1.4.2 — 2026-10-18
 - Fix: Word, Excel and PowerPoint attachments now open in a new tab using Microsoft's free online viewer instead of showing a blank page. PDFs, images, text, audio and video open directly in the browser; other file types (e.g. .zip, .dwg) download instead.
 
