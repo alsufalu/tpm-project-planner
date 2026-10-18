@@ -42,7 +42,24 @@
   const parseD = (s) => { if (!s) return null; const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
   const fmtD = (s) => { const d = parseD(s); return d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"; };
   const fmtRange = (a, b) => (a || b) ? `${fmtD(a)} → ${fmtD(b)}` : "No dates yet";
-  const isLate = (x) => x.status !== "Complete" && x.end_date && parseD(x.end_date) < today();
+  const isLate = (x) => x.status !== "Complete" && !x.ongoing && x.end_date && parseD(x.end_date) < today();
+  // Ongoing items have no end date; a review date reminds the team to check on them.
+  const reviewDue = (x) => x.ongoing && x.status !== "Complete" && x.review_date && parseD(x.review_date) <= today();
+  const daysBetween = (a, b) => Math.round((parseD(b) - parseD(a)) / 86400000);
+  // One-line date summary used on cards and task rows.
+  function dateLine(x, withRange = false) {
+    if (x.status === "Complete" && x.completed_on) {
+      const late = x.end_date && !x.ongoing ? daysBetween(x.end_date, x.completed_on) : 0;
+      return `<span class="done-date">✓ Completed ${fmtD(x.completed_on)}${late > 0 ? ` <span class="late-soft">(${late} day${late > 1 ? "s" : ""} after due)</span>` : ""}</span>`;
+    }
+    if (x.ongoing) {
+      const rv = x.review_date ? ` · <span class="${reviewDue(x) ? "late" : ""}">${reviewDue(x) ? "review was due " : "review by "}${fmtD(x.review_date)}</span>` : "";
+      return `<span class="ongoing">🔁 Ongoing${x.start_date ? " since " + fmtD(x.start_date) : ""}</span>${rv}`;
+    }
+    if (withRange) return `<span class="${isLate(x) ? "late" : ""}">📅 ${fmtRange(x.start_date, x.end_date)}${isLate(x) ? " · overdue" : ""}</span>`;
+    return `<span class="${isLate(x) ? "late" : ""}">📅 ${x.end_date ? (isLate(x) ? "Was due " : "Due ") + fmtD(x.end_date) : "No due date"}</span>`;
+  }
+  const needsAttention = (x) => isLate(x) || reviewDue(x);
   const ago = (iso) => {
     const s = (Date.now() - new Date(iso).getTime()) / 1000;
     if (s < 60) return "just now"; if (s < 3600) return `${Math.floor(s / 60)} min ago`;
@@ -115,7 +132,7 @@
   // ---------- filtering ----------
   const textMatch = (x) => !state.q || [x.title, x.owner, x.comments, x.dependencies].join(" ").toLowerCase().includes(state.q);
   const ownerMatch = (owner) => !state.owner || people(owner).some((p) => p.toLowerCase() === state.owner.toLowerCase());
-  const tileMatch = (x) => !state.tileFilter || (state.tileFilter === "late" ? isLate(x) : x.status === state.tileFilter);
+  const tileMatch = (x) => !state.tileFilter || (state.tileFilter === "late" ? needsAttention(x) : x.status === state.tileFilter);
   function milestoneVisible(m) {
     const ts = tasksOf(m.id);
     if (state.hideComplete && m.status === "Complete") return false;
@@ -197,7 +214,8 @@
   function renderSummary() {
     const ms = state.milestones, ts = state.tasks;
     const tiles = STATUSES.map((s) => ({ key: s, cls: S_CLASS[s], n: ms.filter((m) => m.status === s).length, sub: `${ts.filter((t) => t.status === s).length} tasks`, label: s === "Not started" ? "Not started yet" : s }));
-    tiles.push({ key: "late", cls: "s-late", n: ms.filter(isLate).length, sub: `${ts.filter(isLate).length} tasks past due`, label: "Overdue" });
+    const rv = [...ms, ...ts].filter(reviewDue).length;
+    tiles.push({ key: "late", cls: "s-late", n: ms.filter(needsAttention).length, sub: `${ts.filter(isLate).length} tasks past due${rv ? ` · ${rv} review${rv > 1 ? "s" : ""} due` : ""}`, label: "Overdue" });
     $("#summary").innerHTML = tiles.map((t) => `
       <button class="tile ${t.cls} ${state.tileFilter === t.key ? "on" : ""}" data-tile="${t.key}" title="${t.key === "late" ? "End date has passed and not complete" : esc(S_HINT[t.key])} — click to filter">
         <div class="l">${esc(t.label)}</div><div class="n">${t.n}</div><div class="s">milestones · ${esc(t.sub)}</div>
@@ -229,7 +247,7 @@
     const chips = STATUSES.map((s) => { const n = ts.filter((t) => t.status === s).length; return n ? `<span class="chip ${S_CLASS[s]}" title="${s}">${n} ${s.toLowerCase()}</span>` : ""; }).join("");
     return `<div class="card ${S_CLASS[m.status]}" draggable="true" data-open="${m.id}" data-drag="${m.id}">
       ${prioTag(m) ? `<div class="tags">${prioTag(m)}</div>` : ""}<h4>${esc(m.title)}</h4>
-      <div class="meta"><span>👤 ${esc(m.owner || "Unassigned")}</span><span class="${isLate(m) ? "late" : ""}">📅 ${m.end_date ? (isLate(m) ? "Was due " : "Due ") + fmtD(m.end_date) : "No due date"}</span></div>
+      <div class="meta"><span>👤 ${esc(m.owner || "Unassigned")}</span>${dateLine(m)}</div>
       <div class="prog"><div class="bar"><span style="width:${p.pct}%"></span></div><span>${p.total ? `${p.done}/${p.total} tasks` : "No tasks"}</span></div>
       ${chips ? `<div class="chips">${chips}</div>` : ""}
     </div>`;
@@ -239,7 +257,7 @@
     return `<div class="card ${S_CLASS[t.status]}" draggable="true" data-open="${t.milestone_id}" data-focus="${t.id}" data-drag="${t.id}">
       <div class="parent">${esc(m ? m.title : "")}</div>
       ${prioTag(t) ? `<div class="tags">${prioTag(t)}</div>` : ""}<h4>${esc(t.title)}</h4>
-      <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span><span class="${isLate(t) ? "late" : ""}">📅 ${t.end_date ? (isLate(t) ? "Was due " : "Due ") + fmtD(t.end_date) : "No due date"}</span>${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}</div>
+      <div class="meta"><span>👤 ${esc(t.owner || (m && m.owner) || "Unassigned")}</span>${dateLine(t)}${t.percent_done && t.status !== "Complete" ? `<span>${t.percent_done}%</span>` : ""}</div>
     </div>`;
   }
 
@@ -258,8 +276,8 @@
       const ts = sortItems(tasksOf(m.id).filter(taskVisible));
       if (!milestoneVisible(m) && !ts.length) return;
       const p = progress(m);
-      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${prioTag(m, true)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</td><td class="num">${p.pct}%</td></tr>`);
-      ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${prioTag(t, true)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${fmtD(t.end_date)}</td><td class="num">${pctOfTask(t)}%</td></tr>`));
+      rows.push(`<tr class="ms-row" data-open="${m.id}"><td>${esc(m.title)}</td><td>${prioTag(m, true)}</td><td>${esc(m.owner || "")}</td><td>${pill(m.status)}</td><td class="num">${fmtD(m.start_date)}</td><td class="num ${isLate(m) ? "late" : ""}">${m.ongoing ? "Ongoing" : fmtD(m.end_date)}</td><td class="num">${m.status === "Complete" && m.completed_on ? "✓ " + fmtD(m.completed_on) : p.pct + "%"}</td></tr>`);
+      ts.forEach((t) => rows.push(`<tr class="task-row"><td>${esc(t.title)}</td><td>${prioTag(t, true)}</td><td>${esc(t.owner || "")}</td><td>${statusSelect(t.status, `data-task-status="${t.id}"`)}</td><td class="num">${fmtD(t.start_date)}</td><td class="num ${isLate(t) ? "late" : ""}">${t.ongoing ? "Ongoing" : fmtD(t.end_date)}</td><td class="num">${t.status === "Complete" && t.completed_on ? "✓ " + fmtD(t.completed_on) : pctOfTask(t) + "%"}</td></tr>`));
     });
     $("#view-list").innerHTML = `<div class="table-wrap"><table><thead><tr><th>Milestone / task</th><th>Priority</th><th>Owner</th><th>Status</th><th>Start</th><th>End</th><th>Done</th></tr></thead><tbody>${rows.join("") || `<tr><td colspan="7" class="empty">Nothing matches your filters</td></tr>`}</tbody></table></div>`;
   }
@@ -268,6 +286,7 @@
     const list = state.activity;
     $("#view-activity").innerHTML = `<div class="activity">${list.map((a) => {
       const m = a.milestone_id && milestoneById(a.milestone_id);
+      if (a.entity === "plan") return `<div class="act"><time title="${new Date(a.at).toLocaleString()}">${ago(a.at)}</time><div><strong>Planner update:</strong> ${esc(a.action)}</div></div>`;
       const what = `${a.entity} <strong>${esc(a.title)}</strong>`;
       return `<div class="act"><time title="${new Date(a.at).toLocaleString()}">${ago(a.at)}</time><div><strong>${esc(nameFor(a.actor))}</strong> ${esc(a.action)} ${what}${m && a.entity === "task" ? ` in <a data-open="${m.id}">${esc(m.title)}</a>` : m ? ` · <a data-open="${m.id}">open</a>` : ""}</div></div>`;
     }).join("") || `<div class="empty">No changes recorded yet. Edits made in the planner will show up here.</div>`}</div>`;
@@ -289,18 +308,20 @@
     if (!m) { closeDrawer(); return; }
     const ts = sortItems(tasksOf(m.id), state.taskSortField, state.taskSortDir); const p = progress(m);
     const canMove = state.taskSortField === "plan" && state.taskSortDir === "asc";
-    const allDone = ts.length && ts.every((t) => t.status === "Complete") && m.status !== "Complete";
     $("#drawer-body").innerHTML = `
-      <div class="drawer-tags">${statusSelect(m.status, `data-ms-status="${m.id}"`)} ${prioTag(m, true)}</div>
+      <div class="drawer-tags">${ts.length ? `${pill(m.status)} <span class="muted auto-note" title="A milestone's status follows its tasks">set by its tasks</span>` : statusSelect(m.status, `data-ms-status="${m.id}"`)} ${prioTag(m, true)}${m.ongoing ? ` <span class="ongoing">🔁 Ongoing</span>` : ""}</div>
       <h2>${esc(m.title)}</h2>
       <div class="facts">
         <div class="fact"><div class="k">Owner</div><div class="v">${esc(m.owner || "Unassigned")}</div></div>
         <div class="fact"><div class="k">Start</div><div class="v">${fmtD(m.start_date)}</div></div>
-        <div class="fact"><div class="k">End</div><div class="v ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</div></div>
+        ${m.status === "Complete" && m.completed_on
+          ? `<div class="fact"><div class="k">Completed</div><div class="v">${fmtD(m.completed_on)}</div></div>`
+          : m.ongoing
+            ? `<div class="fact"><div class="k">${m.review_date ? "Review by" : "End"}</div><div class="v ${reviewDue(m) ? "late" : ""}">${m.review_date ? fmtD(m.review_date) : "Ongoing"}</div></div>`
+            : `<div class="fact"><div class="k">End</div><div class="v ${isLate(m) ? "late" : ""}">${fmtD(m.end_date)}</div></div>`}
         <div class="fact"><div class="k">Progress</div><div class="v">${p.pct}% <span class="muted" style="font-size:12px;font-weight:500">(${p.done}/${p.total} tasks)</span></div></div>
       </div>
       <div class="bar"><span style="width:${p.pct}%"></span></div>
-      ${allDone ? `<div class="note" style="background:#e8f6ec;border-color:#b7e4c4;margin-top:14px">All tasks are complete. <button class="btn small primary" data-ms-complete="${m.id}">Mark milestone complete</button></div>` : ""}
       ${m.dependencies ? `<div class="note"><b>Depends on</b>${esc(m.dependencies)}</div>` : ""}
       ${m.comments ? `<div class="note"><b>Comments</b>${esc(m.comments)}</div>` : ""}
       <p class="muted" style="font-size:12px">Last updated ${ago(m.updated_at)}${m.updated_by ? " by " + esc(nameFor(m.updated_by)) : ""}</p>
@@ -320,7 +341,7 @@
         <div class="task ${S_CLASS[t.status]} ${t.status === "Complete" ? "done" : ""}" data-task="${t.id}">
           <div>
             <h4>${esc(t.title)}</h4>
-            <div class="meta">${prioTag(t)}<span>👤 ${esc(t.owner || "Unassigned")}</span><span class="${isLate(t) ? "late" : ""}">📅 ${fmtRange(t.start_date, t.end_date)}${isLate(t) ? " · overdue" : ""}</span></div>
+            <div class="meta">${prioTag(t)}<span>👤 ${esc(t.owner || "Unassigned")}</span>${dateLine(t, true)}</div>
           </div>
           <div class="right">
             ${statusSelect(t.status, `data-task-status="${t.id}"`)}
@@ -350,6 +371,21 @@
       $$("#modal-body [data-c]").forEach((b) => b.onclick = () => { closeModal(); resolve(b.dataset.c === "1"); });
     });
   }
+  // Read a milestone/task form: blanks become null, "ongoing" clears the end date.
+  function formData(form) {
+    const d = Object.fromEntries(new FormData(form));
+    Object.keys(d).forEach((k) => { d[k] = String(d[k]).trim() || null; });
+    d.ongoing = !!form.ongoing?.checked;
+    if (d.ongoing) d.end_date = null; else d.review_date = d.review_date || null;
+    if (d.status && d.status !== "Complete") d.completed_on = null;
+    return d;
+  }
+  // Ticking "Ongoing" greys out the end date.
+  document.addEventListener("change", (e) => {
+    if (e.target.name !== "ongoing") return;
+    const end = e.target.form && e.target.form.end_date;
+    if (end) { end.disabled = e.target.checked; if (e.target.checked) end.value = ""; }
+  });
   const opt = (list, cur) => list.map((s) => `<option ${s === cur ? "selected" : ""}>${esc(s)}</option>`).join("");
 
   function milestoneForm(m) {
@@ -358,11 +394,14 @@
       <form id="mform" class="form-grid">
         <label class="full">Milestone name<input type="text" name="title" required value="${esc(m.title)}"></label>
         <label>Owner<input type="text" name="owner" value="${esc(m.owner)}" placeholder="e.g. Vivek/Alberto"></label>
-        <label>Status<select name="status">${opt(STATUSES, m.status)}</select></label>
+        <label>Status${!isNew && tasksOf(m.id).length ? ` <span class="muted hint-inline">set by its tasks</span>` : ""}<select name="status" ${!isNew && tasksOf(m.id).length ? "disabled" : ""}>${opt(STATUSES, m.status)}</select></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(m))}</select></label>
         <div></div>
         <label>Start date<input type="date" name="start_date" value="${esc(m.start_date)}"></label>
-        <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}"></label>
+        <label>End date<input type="date" name="end_date" value="${esc(m.end_date)}" ${m.ongoing ? "disabled" : ""}></label>
+        <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${m.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
+        <label>Review date <span class="muted hint-inline">optional, for ongoing items</span><input type="date" name="review_date" value="${esc(m.review_date)}"></label>
+        <label>Completed on <span class="muted hint-inline">filled in automatically</span><input type="date" name="completed_on" value="${esc(m.completed_on)}"></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(m.dependencies)}</textarea></label>
         <label class="full">Comments<textarea name="comments">${esc(m.comments)}</textarea></label>
         <div class="modal-actions full"><button type="button" class="btn" id="mcancel">Cancel</button><button class="btn primary" type="submit">${isNew ? "Create milestone" : "Save changes"}</button></div>
@@ -370,7 +409,8 @@
     $("#mcancel").onclick = closeModal;
     $("#mform").onsubmit = async (e) => {
       e.preventDefault();
-      const d = Object.fromEntries(new FormData(e.target)); Object.keys(d).forEach((k) => { d[k] = d[k].trim() || null; });
+      const d = formData(e.target);
+      if (!d.status) delete d.status; // status set by tasks
       if (isNew) {
         d.position = Math.max(0, ...state.milestones.map((x) => x.position)) + 1;
         const { data, error } = await sb.from("pm_milestones").insert(d).select().single();
@@ -389,7 +429,10 @@
         <label>Owner<input type="text" name="owner" value="${esc(t.owner)}"></label>
         <label>Status<select name="status">${opt(STATUSES, t.status)}</select></label>
         <label>Start date<input type="date" name="start_date" value="${esc(t.start_date)}"></label>
-        <label>End date<input type="date" name="end_date" value="${esc(t.end_date)}"></label>
+        <label>End date<input type="date" name="end_date" value="${esc(t.end_date)}" ${t.ongoing ? "disabled" : ""}></label>
+        <label class="check full ongoing-box"><input type="checkbox" name="ongoing" ${t.ongoing ? "checked" : ""}> Ongoing — no end date (it ends when marked Complete)</label>
+        <label>Review date <span class="muted hint-inline">optional, for ongoing items</span><input type="date" name="review_date" value="${esc(t.review_date)}"></label>
+        <label>Completed on <span class="muted hint-inline">filled in automatically</span><input type="date" name="completed_on" value="${esc(t.completed_on)}"></label>
         <label>% done<input type="number" name="percent_done" min="0" max="100" step="5" value="${t.percent_done ?? 0}"></label>
         <label>Priority<select name="priority">${opt(PRIORITIES, prio(t))}</select></label>
         <label class="full">Dependencies / prerequisites<textarea name="dependencies">${esc(t.dependencies)}</textarea></label>
@@ -399,7 +442,7 @@
     $("#tcancel").onclick = closeModal;
     $("#tform").onsubmit = async (e) => {
       e.preventDefault();
-      const d = Object.fromEntries(new FormData(e.target)); Object.keys(d).forEach((k) => { d[k] = String(d[k]).trim() || null; });
+      const d = formData(e.target);
       d.percent_done = Math.max(0, Math.min(100, parseInt(d.percent_done || "0", 10) || 0));
       if (d.status === "Complete") d.percent_done = 100;
       else if (d.percent_done === 100) d.status = "Complete";
@@ -486,7 +529,11 @@
     const col = e.target.closest("[data-drop]"); if (!col || !dragId) return; e.preventDefault();
     const status = col.dataset.drop, id = dragId; dragId = null; col.classList.remove("drop");
     if (col.dataset.kind === "task") { const t = state.tasks.find((x) => x.id === id); if (t && t.status !== status) setTaskStatus(id, status); }
-    else { const m = milestoneById(id); if (m && m.status !== status) setMilestoneStatus(id, status); }
+    else {
+      const m = milestoneById(id); if (!m || m.status === status) return;
+      if (tasksOf(id).length) return toast("This milestone's status follows its tasks — open it and update the tasks instead.", true);
+      setMilestoneStatus(id, status);
+    }
   });
 
   function switchView(v) {

@@ -112,3 +112,56 @@ alter publication supabase_realtime add table public.pm_milestones, public.pm_ta
 -- v1.2.0: priority levels
 alter table public.pm_milestones add column if not exists priority text not null default 'Normal' check (priority in ('Critical','High','Normal','Low'));
 alter table public.pm_tasks add column if not exists priority text not null default 'Normal' check (priority in ('Critical','High','Normal','Low'));
+
+-- v1.3.0: ongoing items, review dates, completion dates, automatic milestone status
+alter table public.pm_milestones add column if not exists ongoing boolean not null default false,
+  add column if not exists review_date date, add column if not exists completed_on date;
+alter table public.pm_tasks add column if not exists ongoing boolean not null default false,
+  add column if not exists review_date date, add column if not exists completed_on date;
+
+create or replace function public.pm_touch()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  new.updated_at := now();
+  new.updated_by := lower(coalesce(auth.jwt()->>'email', new.updated_by));
+  if new.status = 'Complete' then
+    if tg_op = 'INSERT' or old.status is distinct from 'Complete' then
+      new.completed_on := coalesce(new.completed_on, (now() at time zone 'America/Chicago')::date);
+    end if;
+    if new.ongoing and new.end_date is null then new.end_date := new.completed_on; end if;
+  elsif tg_op = 'UPDATE' and old.status = 'Complete' then
+    if new.ongoing and new.end_date is not distinct from old.completed_on then new.end_date := null; end if;
+    new.completed_on := null;
+  end if;
+  return new;
+end $$;
+
+create or replace function public.pm_rollup_status(mid uuid)
+returns text language sql stable set search_path = public as $$
+  select case
+    when count(*) = 0 then null
+    when bool_and(status = 'Complete') then 'Complete'
+    when bool_and(status = 'Not started') then 'Not started'
+    when bool_or(status = 'In progress') then 'In progress'
+    when bool_or(status = 'Pending') then 'Pending'
+    else 'In progress' end
+  from public.pm_tasks where milestone_id = mid;
+$$;
+
+create or replace function public.pm_task_rollup()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare mids uuid[]; m uuid; s text;
+begin
+  if tg_op = 'DELETE' then mids := array[old.milestone_id];
+  elsif tg_op = 'UPDATE' then mids := array[new.milestone_id, old.milestone_id];
+  else mids := array[new.milestone_id]; end if;
+  foreach m in array mids loop
+    s := public.pm_rollup_status(m);
+    if s is not null then
+      update public.pm_milestones set status = s where id = m and status is distinct from s;
+    end if;
+  end loop;
+  return null;
+end $$;
+create trigger pm_tasks_rollup after insert or delete or update of status, milestone_id on public.pm_tasks
+for each row execute function public.pm_task_rollup();
