@@ -2,6 +2,9 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.8.1 — 2026-10-19
+- Weekly call report: new "Starting next week" section — every task due to start the following Mon–Sun with owner, start and due dates, and a flag if it has no owner, has dependencies, or is waiting on someone.
+
 ## v1.8.0 — 2026-10-19
 - New "Weekly call" report (first tab under Reports) for the weekly team phone call: red / yellow / green for the current week, at a glance.
   - Overall light, counts of red / yellow / green / completed, next key dates, and a light for each phase.

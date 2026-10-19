@@ -387,3 +387,4 @@ tr.task-row td:first-child{padding-left:34px}
 .week-nav{display:inline-flex;gap:4px}
 @media (max-width:700px){.wk-counts{grid-template-columns:repeat(2,1fr)}.wk-item .rag{min-width:auto}.rep-head{flex-direction:column}}
 @media print{.wk-item,.wk-phase{break-inside:avoid}.wk-item{border-color:#e4e7ec}}
+.rag-next{color:#1f3a5f;background:#e8eef7}

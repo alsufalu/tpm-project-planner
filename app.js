@@ -529,7 +529,11 @@
     const onTrack = rated.filter((x) => !jIds.has(x.t.id) && x.r.c === "green")
       .sort((a, b) => (a.t.end_date || "9").localeCompare(b.t.end_date || "9"));
     const doneThisWeek = ts.filter((t) => t.status === "Complete" && t.completed_on && t.completed_on >= wk.mon && t.completed_on <= wk.sun);
-    const shownIds = new Set(onTrack.map((x) => x.t.id));
+    // starting next week: open tasks whose start date falls in the following Mon–Sun
+    const nx0 = addDays(wk.sun, 1), nx1 = addDays(wk.sun, 7);
+    const startingNext = open.filter((t) => t.start_date && t.start_date >= nx0 && t.start_date <= nx1 && !jIds.has(t.id))
+      .sort((a, b) => a.start_date.localeCompare(b.start_date) || P_ORDER(a) - P_ORDER(b));
+    const shownIds = new Set([...onTrack.map((x) => x.t.id), ...startingNext.map((t) => t.id)]);
 
     // upcoming risks: the next 4 weeks after this one
     const r0 = addDays(wk.sun, 1), r1 = addDays(wk.sun, 28), risks = [];
@@ -590,6 +594,15 @@
 
       <h3>→ What we're working on this week <span class="count">${onTrack.length}</span></h3>
       ${onTrack.length ? `<ul class="wk-list">${onTrack.map((x) => weekLine(x.t, x.r)).join("")}</ul>` : `<p class="muted">No on-track work scheduled this week${jeopardy.length ? " (see In jeopardy above)" : ""}.</p>`}
+
+      <h3>⇢ Starting next week (${parseD(nx0).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${parseD(nx1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}) <span class="count">${startingNext.length}</span></h3>
+      ${startingNext.length ? `<ul class="wk-list">${startingNext.map((t) => { const m = milestoneById(t.milestone_id), owner = t.owner || (m && m.owner);
+        const flags = [!owner ? "⚠ no owner yet" : "", t.dependencies ? "depends on: " + t.dependencies.split("\n")[0].slice(0, 80) : "", t.status === "Pending" ? "waiting on someone" : ""].filter(Boolean);
+        return `<li class="wk-item" data-open="${t.milestone_id}" data-focus="${t.id}"><span class="rag rag-next">⇢ Next</span>
+          <div><div class="rl-main">${t.key_date ? "★ " : ""}${esc(t.title.split("\n")[0])}${P_ORDER(t) <= 1 ? " " + prioTag(t) : ""}</div>
+          <div class="rl-sub">👤 ${esc(owner || "Unassigned")} · ${esc(m ? m.title : "")}</div>
+          <div class="wk-why">Starts ${fmtD(t.start_date)}${t.end_date ? ` · due ${fmtD(t.end_date)}` : ""}${flags.length ? ` · <span class="amber">${esc(flags.join(" · "))}</span>` : ""}</div></div></li>`; }).join("")}</ul>`
+        : `<p class="muted">Nothing is scheduled to start next week.</p>`}
 
       <h3>⚑ Upcoming risks — next 4 weeks (${fmtD(r0)} – ${fmtD(r1)}) <span class="count">${risks.length}</span></h3>
       ${risks.length ? `<ul class="wk-list">${risks.map((x) => x.t
