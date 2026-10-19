@@ -434,7 +434,7 @@
   // REPORTS: 1) Project status report  2) Timeline (Gantt)  3) Workload & look-ahead
   // Reports respect the phase / person filters and "Hide complete".
   // =====================================================================
-  state.report = "status"; state.horizon = 14;
+  state.report = "weekly"; state.horizon = 14; state.weekOffset = 0;
   const iso = (d) => d.toISOString().slice(0, 10);
   const addDays = (s, n) => { const d = parseD(s); d.setDate(d.getDate() + n); return iso(d); };
   const todayIso = () => { const d = today(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -458,18 +458,150 @@
   const scopeLine = () => [state.phase ? (state.phase === NO_PHASE ? "Other (no phase)" : state.phase) : "All phases", state.owner || "Everyone"].join(" · ");
 
   function renderReports() {
-    const tabs = [["status", "Project status report"], ["timeline", "Timeline (Gantt)"], ["workload", "Workload & look-ahead"]];
-    const body = state.report === "timeline" ? reportTimeline() : state.report === "workload" ? reportWorkload() : reportStatus();
+    const tabs = [["weekly", "Weekly call"], ["status", "Project status report"], ["timeline", "Timeline (Gantt)"], ["workload", "Workload & look-ahead"]];
+    const body = state.report === "weekly" ? reportWeekly() : state.report === "timeline" ? reportTimeline() : state.report === "workload" ? reportWorkload() : reportStatus();
     $("#view-reports").innerHTML = `
       <div class="rep-bar no-print">
         <div class="tabs">${tabs.map(([k, l]) => `<button data-report="${k}" class="${state.report === k ? "active" : ""}">${l}</button>`).join("")}</div>
         <div class="rep-actions">
+          ${state.report === "weekly" ? `<div class="week-nav">
+            <button class="btn small" data-week="-1" title="Previous week">‹</button>
+            <button class="btn small" data-week="0" ${state.weekOffset === 0 ? "disabled" : ""}>This week</button>
+            <button class="btn small" data-week="1" title="Next week">›</button></div>` : ""}
           ${state.report === "status" || state.report === "workload" ? `<label class="check">Look ahead
             <select id="rep-horizon">${[7, 14, 30, 60].map((n) => `<option value="${n}" ${state.horizon === n ? "selected" : ""}>${n} days</option>`).join("")}</select></label>` : ""}
           <button class="btn" id="rep-print">🖨 Print / Save as PDF</button>
         </div>
       </div>
       <article class="report">${body}</article>`;
+  }
+
+  // ---------- 0. Weekly call (green / yellow / red for the selected week) ----------
+  // A task's light for the week:
+  //   RED    - overdue (past its end date, not complete); or should have started 7+ days ago and is still "Not started";
+  //            or due this week and far behind (% done 40+ points under where it should be)
+  //   YELLOW - should have started but is still "Not started"; behind pace (25+ points under expected % done);
+  //            Pending (waiting on someone) and due within 2 weeks; an ongoing item whose review date has passed
+  //   GREEN  - active this week and on pace
+  const weekBounds = (offset) => { const d = today(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow + offset * 7);
+    const a = iso(new Date(d.getFullYear(), d.getMonth(), d.getDate())); return { mon: a, sun: addDays(a, 6) }; };
+  function expectedPct(t, asOf) {
+    if (!t.start_date || !t.end_date || t.ongoing) return null;
+    const span = daysBetween(t.start_date, t.end_date); if (span <= 0) return asOf >= t.end_date ? 100 : 0;
+    return Math.max(0, Math.min(100, Math.round(daysBetween(t.start_date, asOf) / span * 100)));
+  }
+  function ragTask(t, asOf, wk) {
+    if (t.status === "Complete") return { c: "done", why: t.completed_on ? "Completed " + fmtD(t.completed_on) : "Complete" };
+    const pct = pctOfTask(t), exp = expectedPct(t, asOf);
+    if (!t.ongoing && t.end_date && t.end_date < asOf) return { c: "red", why: `Overdue — was due ${fmtD(t.end_date)} (${daysBetween(t.end_date, asOf)} days ago), ${pct}% done` };
+    if (t.status === "Not started" && t.start_date && daysBetween(t.start_date, asOf) >= 7) return { c: "red", why: `Should have started ${fmtD(t.start_date)} — still not started` };
+    if (t.end_date && t.end_date <= wk.sun && exp != null && pct < exp - 40) return { c: "red", why: `Due ${fmtD(t.end_date)} — ${pct}% done, should be ~${exp}%` };
+    if (reviewDue(t)) return { c: "yellow", why: `Ongoing — review was due ${fmtD(t.review_date)}` };
+    if (t.status === "Not started" && t.start_date && t.start_date <= asOf) return { c: "yellow", why: `Was to start ${fmtD(t.start_date)} — not started yet` };
+    if (t.status === "Pending" && t.end_date && daysBetween(asOf, t.end_date) <= 14) return { c: "yellow", why: `Pending (waiting on someone) — due ${fmtD(t.end_date)}` };
+    if (exp != null && exp >= 25 && pct < exp - 25) return { c: "yellow", why: `Behind pace — ${pct}% done, should be ~${exp}% (due ${fmtD(t.end_date)})` };
+    return { c: "green", why: t.ongoing ? "Ongoing" : t.end_date ? `${pct}% done · due ${fmtD(t.end_date)}` : `${pct}% done` };
+  }
+  const RAG_LABEL = { red: "Red", yellow: "Yellow", green: "Green", done: "Done" };
+  const RAG_ICON = { red: "▲", yellow: "●", green: "✓", done: "✓" };
+  const ragDot = (c) => `<span class="rag rag-${c}" title="${RAG_LABEL[c]}"><span aria-hidden="true">${RAG_ICON[c]}</span> ${RAG_LABEL[c]}</span>`;
+  const worst = (cs) => cs.includes("red") ? "red" : cs.includes("yellow") ? "yellow" : cs.length && cs.every((c) => c === "done") ? "done" : "green";
+  const weekLine = (t, r, extra = "") => { const m = milestoneById(t.milestone_id);
+    return `<li class="wk-item" data-open="${t.milestone_id}" data-focus="${t.id}">${ragDot(r.c)}
+      <div><div class="rl-main">${t.key_date ? "★ " : ""}${esc(t.title.split("\n")[0])}${P_ORDER(t) <= 1 ? " " + prioTag(t) : ""}</div>
+      <div class="rl-sub">👤 ${esc(t.owner || (m && m.owner) || "Unassigned")} · ${esc(m ? m.title : "")}</div>
+      <div class="wk-why">${esc(r.why)}${extra}</div></div></li>`; };
+
+  function reportWeekly() {
+    const wk = weekBounds(state.weekOffset), t0 = todayIso();
+    // judge the week as of today for the current week, as of Sunday for past weeks, as of Monday for future weeks
+    const asOf = state.weekOffset === 0 ? t0 : state.weekOffset < 0 ? wk.sun : wk.mon;
+    const ts = repTasks(), ms = repMilestones();
+    const overlaps = (t) => (t.start_date || t.end_date) && (t.start_date || t.end_date) <= wk.sun && (t.ongoing || (t.end_date || t.start_date) >= wk.mon);
+    const open = ts.filter((t) => t.status !== "Complete");
+    // what we're working on: open tasks scheduled in this week (or in progress)
+    const active = open.filter((t) => overlaps(t) || t.status === "In progress" || t.status === "Pending");
+    const rated = active.map((t) => ({ t, r: ragTask(t, asOf, wk) }));
+    // anything open that is red/yellow, even if not scheduled this week (e.g. overdue from before)
+    const jeopardy = open.map((t) => ({ t, r: ragTask(t, asOf, wk) })).filter((x) => x.r.c === "red" || x.r.c === "yellow")
+      .sort((a, b) => (a.r.c === "red" ? 0 : 1) - (b.r.c === "red" ? 0 : 1) || P_ORDER(a.t) - P_ORDER(b.t) || (a.t.end_date || "").localeCompare(b.t.end_date || ""));
+    const jIds = new Set(jeopardy.map((x) => x.t.id));
+    const onTrack = rated.filter((x) => !jIds.has(x.t.id) && x.r.c === "green")
+      .sort((a, b) => (a.t.end_date || "9").localeCompare(b.t.end_date || "9"));
+    const doneThisWeek = ts.filter((t) => t.status === "Complete" && t.completed_on && t.completed_on >= wk.mon && t.completed_on <= wk.sun);
+    const shownIds = new Set(onTrack.map((x) => x.t.id));
+
+    // upcoming risks: the next 4 weeks after this one
+    const r0 = addDays(wk.sun, 1), r1 = addDays(wk.sun, 28), risks = [];
+    const inWin = (d) => d && d >= r0 && d <= r1;
+    open.forEach((t) => {
+      if (jIds.has(t.id) || shownIds.has(t.id)) return; // already listed above
+      const m = milestoneById(t.milestone_id), owner = t.owner || (m && m.owner);
+      const why = [];
+      if (t.key_date && (inWin(t.end_date) || inWin(t.start_date))) why.push(`★ Key date ${keyRange(t)}`);
+      if (inWin(t.start_date) && !owner) why.push(`Starts ${fmtD(t.start_date)} with no owner`);
+      if (inWin(t.start_date) && P_ORDER(t) <= 1) why.push(`${prio(t)} priority — starts ${fmtD(t.start_date)}`);
+      if (inWin(t.end_date) && t.status === "Not started" && !(t.start_date && t.start_date > wk.sun)) why.push(`Due ${fmtD(t.end_date)} and not started`);
+      if (t.status === "Pending" && inWin(t.end_date)) why.push(`Waiting on someone — due ${fmtD(t.end_date)}`);
+      if (t.dependencies && inWin(t.start_date)) why.push(`Starts ${fmtD(t.start_date)} — depends on: ${t.dependencies.split("\n")[0].slice(0, 80)}`);
+      if (why.length) risks.push({ t, why });
+    });
+    ms.forEach((m) => { const p = progress(m);
+      if (!m.ongoing && m.status !== "Complete" && m.end_date && m.end_date >= t0 && m.end_date <= r1 && p.total && p.pct < 50)
+        risks.push({ m, why: [`Milestone ends ${fmtD(m.end_date)} and is only ${p.pct}% done (${p.done}/${p.total} tasks)`] }); });
+    risks.sort((a, b) => ((a.t || a.m).start_date || (a.t || a.m).end_date || "9").localeCompare((b.t || b.m).start_date || (b.t || b.m).end_date || "9"));
+
+    // phase lights for the week
+    const phases = [...new Set(ms.map(phaseOf))].sort((p, q) => Math.min(...ms.filter((m) => phaseOf(m) === p).map((m) => m.position)) - Math.min(...ms.filter((m) => phaseOf(m) === q).map((m) => m.position)));
+    const phaseRows = phases.map((ph) => {
+      const pts = ms.filter((m) => phaseOf(m) === ph).flatMap((m) => tasksOf(m.id)).filter((t) => ts.includes(t));
+      const cs = pts.map((t) => ragTask(t, asOf, wk).c); const thisWk = pts.filter((t) => t.status !== "Complete" && (overlaps(t) || t.status === "In progress"));
+      const c = cs.length ? worst(cs.filter((x) => x !== "green" || true)) : "green";
+      const reds = cs.filter((x) => x === "red").length, yels = cs.filter((x) => x === "yellow").length;
+      return { ph, c: pts.length && pts.every((t) => t.status === "Complete") ? "done" : c, reds, yels, active: thisWk.length, pct: phaseStats(ms.filter((m) => phaseOf(m) === ph)).pct };
+    });
+    const overall = worst(phaseRows.map((r) => r.c));
+    const counts = { red: jeopardy.filter((x) => x.r.c === "red").length, yellow: jeopardy.filter((x) => x.r.c === "yellow").length, green: onTrack.length };
+    const wkLabel = `${parseD(wk.mon).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${parseD(wk.sun).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    const keys = [...ms.filter((m) => m.key_date), ...state.tasks.filter((t) => t.key_date && ts.includes(t))].filter((k) => k.status !== "Complete" && (k.start_date || k.end_date) >= t0)
+      .sort((a, b) => (a.start_date || a.end_date).localeCompare(b.start_date || b.end_date)).slice(0, 3);
+
+    return `
+      <header class="rep-head">
+        <div><h2>Weekly team call</h2><div class="muted">Week of ${wkLabel}${state.weekOffset === 0 ? " (this week)" : state.weekOffset === 1 ? " (next week)" : state.weekOffset === -1 ? " (last week)" : ""} · ${esc(scopeLine())}</div></div>
+        <div class="wk-overall rag-bg-${overall}"><div class="k">Overall</div><div class="v">${RAG_ICON[overall]} ${RAG_LABEL[overall]}</div></div>
+      </header>
+
+      <section class="wk-counts">
+        <div class="wk-count rag-bg-red"><div class="n">${counts.red}</div><div class="l">▲ Red — in jeopardy</div></div>
+        <div class="wk-count rag-bg-yellow"><div class="n">${counts.yellow}</div><div class="l">● Yellow — watch</div></div>
+        <div class="wk-count rag-bg-green"><div class="n">${counts.green}</div><div class="l">✓ Green — on track this week</div></div>
+        <div class="wk-count rag-bg-done"><div class="n">${doneThisWeek.length}</div><div class="l">✓ Completed this week</div></div>
+      </section>
+      ${keys.length ? `<div class="wk-keys">★ Next key dates: ${keys.map((k) => `<b>${esc(k.title.split("\n")[0])}</b> ${keyRange(k)} (${daysBetween(t0, k.start_date || k.end_date)} days)`).join(" · ")}</div>` : ""}
+
+      <h3>Phases this week</h3>
+      <div class="wk-phases">${phaseRows.map((r) => `<div class="wk-phase rag-edge-${r.c}" data-phase="${esc(r.ph || NO_PHASE)}">
+        <div class="wk-ph-top"><strong>${esc(r.ph || "Other (no phase)")}</strong>${ragDot(r.c)}</div>
+        <div class="muted small">${r.active} active this week · ${r.pct}% overall${r.reds ? ` · <span class="late">${r.reds} red</span>` : ""}${r.yels ? ` · <span class="amber">${r.yels} yellow</span>` : ""}</div></div>`).join("")}</div>
+
+      <h3>▲ In jeopardy <span class="count">${jeopardy.length}</span></h3>
+      ${jeopardy.length ? `<ul class="wk-list">${jeopardy.map((x) => weekLine(x.t, x.r)).join("")}</ul>` : `<p class="muted">Nothing red or yellow. 🎉</p>`}
+
+      <h3>→ What we're working on this week <span class="count">${onTrack.length}</span></h3>
+      ${onTrack.length ? `<ul class="wk-list">${onTrack.map((x) => weekLine(x.t, x.r)).join("")}</ul>` : `<p class="muted">No on-track work scheduled this week${jeopardy.length ? " (see In jeopardy above)" : ""}.</p>`}
+
+      <h3>⚑ Upcoming risks — next 4 weeks (${fmtD(r0)} – ${fmtD(r1)}) <span class="count">${risks.length}</span></h3>
+      ${risks.length ? `<ul class="wk-list">${risks.map((x) => x.t
+        ? `<li class="wk-item" data-open="${x.t.milestone_id}" data-focus="${x.t.id}"><span class="rag rag-risk">⚑ Risk</span><div><div class="rl-main">${x.t.key_date ? "★ " : ""}${esc(x.t.title.split("\n")[0])}</div><div class="rl-sub">👤 ${esc(x.t.owner || (milestoneById(x.t.milestone_id) || {}).owner || "Unassigned")} · ${esc((milestoneById(x.t.milestone_id) || {}).title || "")}</div><div class="wk-why">${x.why.map(esc).join(" · ")}</div></div></li>`
+        : `<li class="wk-item" data-open="${x.m.id}"><span class="rag rag-risk">⚑ Risk</span><div><div class="rl-main">${esc(x.m.title)} <span class="muted small">(milestone)</span></div><div class="rl-sub">👤 ${esc(x.m.owner || "Unassigned")}</div><div class="wk-why">${x.why.map(esc).join(" · ")}</div></div></li>`).join("")}</ul>` : `<p class="muted">No risks flagged in the next 4 weeks.</p>`}
+
+      ${doneThisWeek.length ? `<h3>✓ Completed this week <span class="count">${doneThisWeek.length}</span></h3><ul class="rep-list">${doneThisWeek.map((t) => taskLine(t, ` · ✓ ${fmtD(t.completed_on)}`)).join("")}</ul>` : ""}
+
+      <p class="muted small rep-foot"><b>How the lights work.</b> <b>▲ Red</b>: overdue; should have started a week+ ago but hasn't; or due this week and far behind (% done 40+ points under schedule).
+      <b>● Yellow</b>: should have started but hasn't; behind pace (25+ points under where % done should be by now); waiting on someone and due within 2 weeks; or an ongoing item's review date has passed.
+      <b>✓ Green</b>: on schedule. <b>⚑ Risks</b> look ahead 4 weeks: key dates, work starting with no owner, Critical/High work starting, work due but not started, things waiting on others or with dependencies, and milestones ending soon with under half done.
+      Lights depend on keeping <b>% done</b> and <b>status</b> up to date.</p>`;
   }
 
   // ---------- 1. Project status report ----------
@@ -828,6 +960,8 @@
       if (a && await confirmBox("Remove file?", `“${esc(a.file_name)}” will be deleted for everyone.`, "Remove")) { if (await removeFiles([a])) { await loadAll(); toast("File removed"); } }
       return;
     }
+    const wkb = e.target.closest("[data-week]");
+    if (wkb) { const v = Number(wkb.dataset.week); state.weekOffset = v === 0 ? 0 : state.weekOffset + v; return renderReports(); }
     const rt = e.target.closest("[data-report]");
     if (rt) { state.report = rt.dataset.report; return renderReports(); }
     if (e.target.closest("#rep-print")) return window.print();

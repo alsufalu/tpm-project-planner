@@ -2,6 +2,14 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.8.0 — 2026-10-19
+- New "Weekly call" report (first tab under Reports) for the weekly team phone call: red / yellow / green for the current week, at a glance.
+  - Overall light, counts of red / yellow / green / completed, next key dates, and a light for each phase.
+  - In jeopardy: every red or yellow item with the reason (overdue, hasn't started, behind pace, waiting on someone, review due).
+  - What we're working on this week: on-track work scheduled this week.
+  - Upcoming risks (next 4 weeks): key dates, work starting with no owner, Critical/High work starting, work due but not started, dependencies, milestones ending with under half done.
+  - Step to last / next week; Print / Save as PDF.
+
 ## v1.7.0 — 2026-10-18
 - Team code access: partners open the link, choose "Team code", type their name and the code once per phone/computer — no account, email or password. Their changes show under their name. The planner remembers the device (tip: on iPhone use Share → Add to Home Screen).
 - Team screen shows the current team code; members who sign in with an email can change it. Code users appear as "joined with the team code" and can be removed.
