@@ -285,6 +285,8 @@
 
   // ---------- rendering ----------
   function renderAll() {
+    const filtered = !!(state.q || state.owner || state.phase || state.tileFilter || state.hideComplete);
+    $("#clear-filters").classList.toggle("hidden", !filtered);
     renderHeader(); renderSummary(); renderKeyDates(); renderPhases(); renderOwnerFilter(); renderPhaseFilter();
     if (state.view === "board") renderBoard();
     if (state.view === "tasks") renderTaskBoard();
@@ -1056,7 +1058,14 @@
     else renderAll();
   }
   $$("#view-tabs button").forEach((b) => b.onclick = () => switchView(b.dataset.view));
-  $("#search").oninput = (e) => { state.q = e.target.value.trim().toLowerCase(); renderAll(); };
+  // Read the search box on every kind of change: typing, the ✕ clear button (which some browsers,
+  // e.g. Safari, report only as a "search" event), Esc, paste/cut, and autofill.
+  const syncSearch = () => { const q = $("#search").value.trim().toLowerCase(); if (q !== state.q) { state.q = q; renderAll(); } };
+  ["input", "search", "change", "keyup", "paste", "cut"].forEach((ev) => $("#search").addEventListener(ev, () => setTimeout(syncSearch, 0)));
+  $("#clear-filters").onclick = () => {
+    state.q = ""; state.owner = ""; state.phase = ""; state.tileFilter = null; state.hideComplete = false;
+    $("#search").value = ""; $("#hide-complete").checked = false; renderAll(); toast("Filters cleared");
+  };
   $("#owner-filter").onchange = (e) => { state.owner = e.target.value; renderAll(); };
   $("#phase-filter").onchange = (e) => { state.phase = e.target.value; renderAll(); };
   $("#hide-complete").onchange = (e) => { state.hideComplete = e.target.checked; renderAll(); };

@@ -2,6 +2,10 @@
 
 The version shows next to the "TPM Project Planner" title in the app. Newest first.
 
+## v1.8.2 — 2026-11-06
+- Fix: clearing the search box with its ✕ button (or Esc, cut, autofill) now removes the search filter right away — previously some browsers (notably Safari) kept filtering until the page was reloaded.
+- New "✕ Clear filters" button appears whenever a search, person, phase, tile or "Hide complete" filter is on, and resets them all in one click.
+
 ## v1.8.1 — 2026-10-19
 - Weekly call report: new "Starting next week" section — every task due to start the following Mon–Sun with owner, start and due dates, and a flag if it has no owner, has dependencies, or is waiting on someone.
 
